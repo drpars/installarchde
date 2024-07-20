@@ -945,6 +945,7 @@ fonts() {
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
@@ -973,6 +974,7 @@ themes() {
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
@@ -1052,6 +1054,7 @@ hyprland() {
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
@@ -1104,6 +1107,7 @@ plasma() {
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
@@ -1163,6 +1167,7 @@ gnome() {
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
