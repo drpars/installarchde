@@ -806,10 +806,12 @@ filebrowsersapps() {
     "dolphin-plugins" "KDE" on
     "kdenetwork-filesharing" "KDE" on
     "ffmpegthumbs" "KDE" on
+    "archlinux-xdg-menu" "" on
     "ark" "KDE" on
     "thunar" "XFCE" off
     "thunar-volman" "XFCE" off
     "thunar-archive-plugin" "XFCE" off
+    "thunar-shares-plugin" "(AUR)" off
     "file-roller" "" off
     "tumbler" "" on
   )
@@ -818,6 +820,7 @@ filebrowsersapps() {
     for item in $sel; do
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "thunar-shares-plugin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
