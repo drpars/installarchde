@@ -1,0 +1,1528 @@
+#!/bin/bash
+
+apptitle="Arch Linux DE & Apps Installation"
+
+mainmenu() {
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Update" ""
+    "Install" ""
+    "Config" ""
+    "Shutdown" ""
+  )
+
+  sel=$(dialog --backtitle "$apptitle" --title "Main Menu" --default-item "${nextitem}" --cancel-button "Exit" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [ "$?" = "0" ]; then
+    case ${sel} in
+    "Update")
+      updatemenu
+      nextitem="Install"
+      ;;
+    "Install")
+      installmenu
+      nextitem="Config"
+      ;;
+    "Config")
+      configmenu
+      nextitem="Shutdown"
+      ;;
+    "Shutdown")
+      shutdownmenu
+      nextitem="Shutdown"
+      ;;
+    esac
+    mainmenu "${nextitem}"
+  else
+    clear
+  fi
+}
+
+cpumodel() {
+  cat /proc/cpuinfo | awk '/model name/' | uniq | grep -i "$1" >/dev/null
+}
+
+gpumodel() {
+  lspci | grep -E "(VGA|3D)" | awk '/"$1"/' >/dev/null
+}
+
+confirm() {
+  dialog --backtitle "$apptitle" $2 --yesno "$1" 0 0
+}
+
+message() {
+  dialog --backtitle "$apptitle" $2 --msgbox "$1" 0 0
+}
+
+pressanykey() {
+  read -n1 -p "Press any key to continue."
+}
+
+instpkg() {
+  if [ ! "$1" = "" ]; then
+    clear
+    echo "# sudo pacman -S --needed $1"
+    sudo pacman -S --needed $1
+    pressanykey
+  fi
+  if [ ! "$2" = "" ]; then
+    if [ -f /usr/bin/yay ]; then
+      clear
+      echo "# sudo -u $(whoami) yay -S --needed $2"
+      sudo -u $(whoami) yay -S --needed $2
+      pressanykey
+    else
+      if [ -f /usr/bin/paru ]; then
+        clear
+        echo "# sudo -u $(whoami) paru -S --needed $2"
+        sudo -u $(whoami) paru -S --needed $2
+        pressanykey
+      else
+        echo "To install AUR packages, you need to install an aurhelper in Upadte menu !"
+      fi
+    fi
+  fi
+}
+
+choosepkg() {
+  if [ "$2" = "" ]; then
+    title=$1
+  else
+    title=$2
+  fi
+  options=()
+  items=$(pacman -Ssq $1)
+  for item in $items; do
+    options+=("$item" "" off)
+  done
+  sel=$(dialog --backtitle "$apptitle" --title "$title" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ ! "$?" = "0" ]; then
+    return 1
+  fi
+  for itm in $sel; do
+    pkg="$pkg $(echo $itm | sed 's/"//g')"
+  done
+  instpkg "$pkg" "$aurpkg"
+  return 0
+}
+
+serviceenable() {
+  if [ "$2" = "" ]; then
+    displayname="$1"
+  else
+    displayname="$2 ($1)"
+  fi
+  if (confirm "Start $displayname service at boot ?\n\nsystemctl enable $1"); then
+    clear
+    echo "sudo systemctl enable $1"
+    sudo systemctl enable $1
+    pressanykey
+  fi
+}
+
+servicserviceedisable() {
+  if [ "$2" = "" ]; then
+    displayname="$1"
+  else
+    displayname="$2 ($1)"
+  fi
+  if (confirm "Disable $displayname service at boot ?\n\nsystemctl disable $1"); then
+    clear
+    echo "systemctl disable $1"
+    sudo systemctl disable $1
+    pressanykey
+  fi
+}
+
+updatemenu() {
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Install yay" ""
+    "Install paru" ""
+    "" ""
+    "Upgrade" "pacman -Syu"
+    "Clean orphan" "pacman -Rns \$(pacman -Qqtd)"
+    "Clean cache" "pacman -Sc"
+    "" ""
+    "Edit pacman.conf" ""
+    "Edit mirrorlist" ""
+    "" ""
+    "Update keyring" "pacman -S archlinux-keyring"
+    "Refresh pacman keys" "pacman-key --refresh-keys"
+    "" ""
+  )
+  if [ -f /var/lib/pacman/db.lck ]; then
+    options+=(
+      "Remove db.lck" "rm /var/lib/pacman/db.lck"
+      "" ""
+    )
+  fi
+  sel=$(dialog --backtitle "$apptitle" --title "Updates Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    case ${sel} in
+    "Install yay")
+      if (confirm "Do you want to install yay ? \n"); then
+        clear
+        git clone https://aur.archlinux.org/yay.git
+        cd yay
+        makepkg -si
+        cd ..
+        pressanykey
+      fi
+      nextitem="Install paru"
+      ;;
+    "Install paru")
+      if (confirm "Do you want to install paru ?" \n); then
+        # Paru
+        clear
+        git clone https://aur.archlinux.org/paru.git
+        cd paru
+        makepkg -si
+        cd ..
+        pressanykey
+      fi
+      nextitem="Upgrade"
+      ;;
+    "Upgrade")
+      clear
+      sudo pacman -Syu
+      nextitem="Clean orphan"
+      ;;
+    "Clean orphan")
+      clear
+      sudo pacman -Rns $(pacman -Qqtd)
+      nextitem="Clean cache"
+      ;;
+    "Clean cache")
+      clear
+      sudo pacman -Sc
+      nextitem="Edit pacman.conf"
+      ;;
+    "Edit pacman.conf")
+      clear
+      sudo nvim /etc/pacman.conf
+      nextitem="Edit mirrorlist"
+      ;;
+    "Edit mirrorlist")
+      clear
+      sudo nvim /etc/pacman.d/mirrorlist
+      nextitem="Update keyring"
+      ;;
+    "Update keyring")
+      clear
+      sudo pacman -S archlinux-keyring
+      nextitem="Refresh pacman keys"
+      ;;
+    "Refresh pacman keys")
+      clear
+      sudo pacman-key --refresh-keys
+      nextitem="Remove db.lck"
+      ;;
+    "Remove db.lck")
+      clear
+      sudo rm /var/lib/pacman/db.lck
+      nextitem="Remove db.lck"
+      ;;
+    esac
+    updatemenu "${nextitem}"
+  fi
+}
+
+installmenu() {
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Drivers" ""
+    "Applications" ""
+    "Fonts" ""
+    "Themes" ""
+    "Desktop Environment" ""
+    "Display Manager" ""
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Install Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    case ${sel} in
+    "Drivers")
+      driversmenu
+      nextitem="Applications"
+      ;;
+    "Applications")
+      appmenu
+      nextitem="Fonts"
+      ;;
+    "Fonts")
+      fonts
+      nextitem="Themes"
+      ;;
+    "Themes")
+      themes
+      nextitem="Desktop Environment"
+      ;;
+    "Desktop Environment")
+      demenu
+      nextitem="Display Manager"
+      ;;
+    "Display Manager")
+      displaymanager
+      nextitem="Display Manager"
+      ;;
+    esac
+    installmenu "${nextitem}"
+  fi
+}
+
+driversmenu() {
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Amd" ""
+    "Nvidia" ""
+    "Nvidia VA-API" "nvidia-vaapi-driver"
+    "Asus" ""
+    "Sound" ""
+    "Mkinitcpio firmware" "(AUR)"
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Drivers :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    case ${sel} in
+    "Amd")
+      amddriver
+      nextitem="Nvidia"
+      ;;
+    "Nvidia")
+      nvidiadriver
+      nextitem="Nvidia VA-API"
+      ;;
+    "Nvidia VA-API")
+      options=(
+        "meson" "" on
+        "gst-plugins-bad" "" on
+        "ffnvcodec-headers" "" on
+      )
+
+      sel=$(dialog --backtitle "$apptitle" --title "NVIDIA VA-API dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+      if [ "$?" = 0 ]; then
+        for item in $sel; do
+          case $item in
+          # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+          *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+          esac
+        done
+        instpkg "$pkg" "$aurpkg"
+        if (pacman -Qs ffnvcodec-headers); then
+          clear
+          git clone https://github.com/elFarto/nvidia-vaapi-driver.git
+          cd nvidia-vaapi-driver
+          meson setup build
+          meson install -C build
+          cd ..
+          rm -r nvidia-vaapi-driver
+          echo "nvidia-vaapi-driver is successfully installed"
+          pressanykey
+        fi
+      fi
+      nextitem="Asus"
+      ;;
+    "Asus")
+      asusdriver
+      nextitem="Sound"
+      ;;
+    "Sound")
+      sounddriver
+      nextitem="Mkinitcpio firmware"
+      ;;
+    "Mkinitcpio firmware")
+      if (confirm "Do you want to install firmware ? \n "); then
+        clear
+        instpkg "" mkinitcpio-firmware
+        pressanykey
+      fi
+      nextitem="Mkinitcpio firmware"
+      ;;
+    esac
+    driversmenu "${nextitem}"
+  fi
+}
+
+amddriver() {
+  options=(
+    "mesa" "" on
+    "lib32-mesa" "" on
+    "xf86-video-amdgpu" "" on
+    "vulkan-radeon" "" on
+    "lib32-vulkan-radeon" "" on
+    "libva-mesa-driver" "" on
+    "lib32-libva-mesa-driver" "" on
+    "mesa-vdpau" "" on
+    "lib32-mesa-vdpau" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Amd :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+    if (pacman -Qs mesa); then
+      if (confirm "Do you want to apply necessary modules ? \n "); then
+        clear
+        amdmodule="amdgpu radeon"
+        if (gpumodel "amd"); then
+          gpumodule="$amdmodule"
+        else
+          gpumodule=""
+        fi
+        # /etc/mkinitcpio.conf
+        presentmkinitcpiomodules=$(cat /etc/mkinitcpio.conf | grep 'MODULES' | awk -F\) '{print $1}' | tr -d 'MODULES=(')
+        if [[ $presentmkinitcpiomodules = "" ]]; then
+          sudo sed -i "s/MODULES=()/MODULES=(${gpumodule})/g" /etc/mkinitcpio.conf
+          sudo mkinitcpio -P
+        else
+          if (echo $presentmkinitcpiomodules | grep "$gpumodule" >/dev/null); then
+            clear
+            echo "$gpumodule -  Related modules already exist..."
+            pressanykey
+          else
+            newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
+            sudo sed -i "s/MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/g" /etc/mkinitcpio.conf
+            sudo mkinitcpio -P
+          fi
+        fi
+      fi
+    fi
+  fi
+}
+
+nvidiadriver() {
+  options=(
+    "nvidia" "" off
+    "nvidia-lts" "" off
+    "nvidia-dkms" "" on
+    "nvidia-open" "" off
+    "nvidia-open-dkms" "" off
+    "nvidia-utils" "" on
+    "lib32-nvidia-utils" "" on
+    "nvidia-settings" "" on
+    "egl-wayland" "" on
+    "libva-nvidia-driver" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Nvidia :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+    if (pacman -Qs nvidia); then
+      if (confirm "Do you want to apply necessary modules ? \n "); then
+        clear
+        nvidiamodule="nvidia nvidia_modeset nvidia_uvm nvidia_drm"
+        nvidiakernelmodule="modeset=1"
+        if (gpumodel "nvidia"); then
+          gpumodule="$nvidiamodule"
+          gpukernel="$nvidiakernelmodule"
+        else
+          gpumodule=""
+          gpukernel=""
+        fi
+        # /etc/mkinitcpio.conf - MODULES
+        presentmkinitcpiomodules=$(cat /etc/mkinitcpio.conf | grep 'MODULES' | awk -F\) '{print $1}' | tr -d 'MODULES=(')
+        if [[ $presentmkinitcpiomodules = "" ]]; then
+          sudo sed -i "s/MODULES=()/MODULES=(${gpumodule})/g" /etc/mkinitcpio.conf
+          sudo mkinitcpio -P
+        else
+          if (echo $presentmkinitcpiomodules | grep "$gpumodule" >/dev/null); then
+            clear
+            echo "$gpumodule -  Related modules already exist..."
+            pressanykey
+          else
+            newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
+            sudo sed -i "s/MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/g" /etc/mkinitcpio.conf
+            sudo mkinitcpio -P
+          fi
+        fi
+        # /etc/modprobe.d/nvidia.conf
+        clear
+        if [[ ! -f /etc/modprobe.d/nvidia.conf ]]; then
+          echo "options nvidia_drm modeset=1 fbdev=1" | sudo tee /etc/modprobe.d/nvidia.conf >/dev/null
+          sudo mkinitcpio -P
+          pressanykey
+        fi
+        # kernel mod - /etc/kernel/cmdline
+        presentkernelcmdline=$(cat /etc/kernel/cmdline)
+        if [ -f /etc/kernel/cmdline ]; then
+          if [[ $presentkernelcmdline != "" ]]; then
+            if (echo $presentkernelcmdline | grep "$gpukernel" >/dev/null); then
+              clear
+              echo "$gpukernel -  Related modules already exist..."
+              pressanykey
+            else
+              newkernelcmdline="${presentkernelcmdline} ${gpukernel}"
+              echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
+              sudo mkinitcpio -P
+            fi
+          fi
+        fi
+      fi
+    fi
+  fi
+}
+
+asusdriver() {
+  isg14repo=$(cat /etc/pacman.conf | grep -i "[g14]" >/dev/null)
+  if ($isg14repo); then
+    options=(
+      "asusctl" "" on
+      "supergfxctl" "" on
+      "rog-control-center" "" on
+      "brightnessctl" "" on
+    )
+  else
+    options=(
+      "asusctl" "(AUR)" on
+      "supergfxctl" "(AUR)" on
+      "rog-control-center" "(AUR)" on
+      "brightnessctl" "" on
+    )
+  fi
+  sel=$(dialog --backtitle "$apptitle" --title "Asus :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    if ($isg14repo); then
+      for item in $sel; do
+        case $item in
+        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        esac
+      done
+    else
+      for item in $sel; do
+        case $item in
+        "asusctl") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        "supergfxctl") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        "rog-control-center") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        esac
+      done
+    fi
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+sounddriver() {
+  options=(
+    "wireplumber" "" on
+    "pipewire" "" on
+    "pipewire-alsa" "" on
+    "pipewire-pulse" "" on
+    "pipewire-jack" "" on
+    "pipewire-v4l2" "" on
+    "pipewire-zeroconf" "" on
+    "pipewire-x11-bell" "" off
+    "easyeffects" "" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Sound :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+appmenu() {
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Console" ""
+    "Compression tools" ""
+    "Programming" ""
+    "File systems" ""
+    "System" ""
+    "Internet" ""
+    "Common applications" ""
+    "File browsers" ""
+    "Multimedia" ""
+    "Games" ""
+    "Other" ""
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Applications :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    case ${sel} in
+    "Console")
+      consoleapps
+      nextitem="Compression tools"
+      ;;
+    "Compression tools")
+      compressionapps
+      nextitem="Programming"
+      ;;
+    "Programming")
+      programmingapps
+      nextitem="File systems"
+      ;;
+    "File systems")
+      filesystemsapps
+      nextitem="System"
+      ;;
+    "System")
+      systemapps
+      nextitem="Internet"
+      ;;
+    "Internet")
+      internetapps
+      nextitem="Common applications"
+      ;;
+    "Common applications")
+      commonapps
+      nextitem="File browsers"
+      ;;
+    "File browsers")
+      filebrowsersapps
+      nextitem="Multimedia"
+      ;;
+    "Multimedia")
+      multimediaapps
+      nextitem="Games"
+      ;;
+    "Games")
+      gameapps
+      nextitem="Other"
+      ;;
+    "Other")
+      otherapps
+      nextitem="Other"
+      ;;
+    esac
+    appmenu "${nextitem}"
+  fi
+}
+
+consoleapps() {
+  options=(
+    "cmatrix" "" off
+    "mpv" "" on
+    "mc" "" on
+    "mlocate" "" on
+    "fd" "" on
+    "ripgrep" "" on
+    "btop" "" on
+    "nvtop" "" on
+    "bat" "" on
+    "psutils" "" on
+    "xsel" "" on
+    "xclip" "" off
+    "wl-clipboard" "" on
+    "zsh" "" on
+    "zsh-completions" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Console applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+compressionapps() {
+  options=(
+    "tar" "" off
+    "zip" "" off
+    "unzip" "" off
+    "unrar" "" off
+    "p7zip" "" off
+    "lzop" "" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Compression tools :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+programmingapps() {
+  options=(
+    # Python
+    "python" "" on
+    "python-pip" "" on
+    "python-psutil" "" on
+    "python-requests" "" on
+    # others
+    "go" "" on
+    "npm" "" on
+    "xmlstarlet" "" on
+    "luarocks" "" on
+    "ruby" "" on
+    "rubygems" "" on
+    "composer" "" on
+    "php" "" on
+    "julia" "" on
+    "jq" "" on
+    "cpanminus" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Programming language :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+filesystemsapps() {
+  options=(
+    "gvfs" "" on
+    "gvfs-mtp" "" on
+    "gvfs-smb" "" on
+    "gvfs-nfs" "" on
+    "gvfs-afc" "" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "File systems :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+systemapps() {
+  options=(
+    "gparted" "(GTK) Partitions manager" off
+    "acpi" "" off
+    "acpi_call-dkms" "" off
+    "lm_sensors" "" off
+    "lib32-lm_sensors" "" off
+    "os-prober" "Detect OS for multi-boot (grub)" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "System applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+internetapps() {
+  options=(
+    "firefox" "" on
+    "thunderbird" "" on
+    "wget" "" off
+    "uget" "" off
+    "transmission-gtk" "" off
+    "transmission-qt" "" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Internet applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+    for item in $sel; do
+      case $item in
+      "firefox") choosepkg "firefox-i18n-" ;;
+      "thunderbird") choosepkg "thunderbird-i18n-" ;;
+      esac
+    done
+  fi
+}
+
+commonapps() {
+  options=(
+    "libreoffice-fresh" "" off
+    "libreoffice-still" "" off
+    "mousepad" "" on
+    "bleachbit" "Profile cleaner" off
+    "webapp-manager" "(AUR)" on
+    "stacer-bin" "(AUR)" off
+    "isomaster" "(AUR)" off
+    "startup-settings-git" "(AUR)" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Common applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+filebrowsersapps() {
+  options=(
+    "dolphin" "KDE" on
+    "dolphin-plugins" "KDE" on
+    "kdenetwork-filesharing" "KDE" on
+    "ffmpegthumbs" "KDE" on
+    "ark" "KDE" on
+    "thunar" "XFCE" off
+    "thunar-volman" "XFCE" off
+    "thunar-archive-plugin" "XFCE" off
+    "file-roller" "" off
+    "tumbler" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "File browsers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+multimediaapps() {
+  options=(
+    "smplayer" "" off
+    "smplayer-skins" "" off
+    "smplayer-themes" "" off
+    "elisa" "" off
+    "gst-plugins-base" "" on
+    "gst-plugins-good" "" on
+    "gst-plugins-ugly" "" on
+    "gst-plugins-bad" "" on
+    "gst-plugin-pipewire" "" on
+    "gst-libav" "" on
+    "libde265" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Multimedia firmware & apps :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+gameapps() {
+  options=(
+    "steam" "" on
+    "heroic-games-launcher-bin" "(AUR)" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Game launchers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "heroic-games-launcher-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
+otherapps() {
+  options=(
+    "Virt Manager" ""
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Other applications :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  case $sel in
+  "Virt Manager")
+    options=(
+      "libvirt" "" on
+      "qemu-full" "" on
+      "iptables-nft" "" on
+      "dnsmasq" "" on
+      "openbsd-netcat" "" on
+      "dmidecode" "" on
+      "virt-manager" "" on
+      "libguestfs" "" on
+      "edk2-ovmf" "" on
+      "libvirt-python" "" on
+    )
+    sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+    if [ "$?" = 0 ]; then
+      for item in $sel; do
+        case $item in
+        # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        esac
+      done
+      instpkg "$pkg" "$aurpkg"
+      if (pacman -Qs libvirt >/dev/null); then
+        if (cat /etc/nsswitch.conf | grep "$(cat /etc/hostname)") >/dev/null; then
+          echo "/etc/nsswitch.conf is already modified..."
+        else
+          printf "%s\n" \
+            "" \
+            "hosts: files libvirt libvirt_guest dns $(cat /etc/hostname)" | sudo tee -a /etc/nsswitch.conf >/dev/null
+        fi
+        if [ ! -f /etc/modprobe.d/kvm_$cputype.conf ]; then
+          printf "options kvm_$cputype nested=1" | sudo tee -a /etc/modprobe.d/kvm_$cputype.conf >/dev/null
+        fi
+        if (cat /etc/libvirt/qemu.conf | grep "$(whoami)") >/dev/null; then
+          echo "/etc/libvirt/qemu.conf is already modified..."
+        else
+          printf "%s\n" \
+            "" \
+            "# User Settings" \
+            "user = \"$(whoami)\"" \
+            "group = \"$(whoami)\"" | sudo tee -a /etc/libvirt/qemu.conf >/dev/null
+        fi
+        serviceenable libvirtd.service
+        pressanykey
+      fi
+    fi
+    ;;
+  esac
+}
+
+fonts() {
+  options=(
+    "ttf-jetbrains-mono-nerd" "" on
+    "ttf-fantasque-nerd" "" on
+    "ttf-ubuntu-nerd" "" on
+    "ttf-ubuntu-mono-nerd" "" on
+    "ttf-hack-nerd" "" on
+    "ttf-firacode-nerd" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Fonts :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+  fi
+}
+
+themes() {
+  options=(
+    "qogir-icon-theme" "(AUR)" on
+    "mocu-xcursor" "(AUR)" on
+    "kvantum" "(QT6)" off
+    "kvantum-qt5" "(QT5)" off
+    "qt5ct" "" off
+    "qt6ct" "" off
+    "qt5ct-kde" "(AUR)" off
+    "qt6ct-kde" "(AUR)" off
+    "lightly-kf6-git" "(AUR)" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Themes :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "mocu-xcursor") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+  fi
+}
+
+demenu() {
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Hyprland" ""
+    "KDE/Plasma" ""
+    "Gnome" ""
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Display Manager :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [ "$?" = 0 ]; then
+    case $sel in
+    "Hyprland")
+      hyprland
+      nextitem="KDE/Plasma"
+      ;;
+    "KDE/Plasma")
+      plasma
+      nextitem="Gnome"
+      ;;
+    "Gnome")
+      gnome
+      nextitem="Gnome"
+      ;;
+    esac
+    demenu "${nextitem}"
+  fi
+}
+
+hyprland() {
+  options=(
+    "hyprland" "" on
+    "hyprpaper" "" on
+    "hypridle" "" on
+    "hyprlock" "" on
+    "hyprcursor" "" on
+    "hyprpicker" "(AUR)" on
+    "xdg-desktop-portal-hyprland" "" on
+    "xdg-desktop-portal-gtk" "" off
+    "qt5-wayland" "" on
+    "qt6-wayland" "" on
+    "kitty" "" on
+    "rofi-wayland" "" on
+    "polkit-kde-agent" "" off
+    "polkit-gnome" "" on
+    "waybar" "" on
+    "waybar-updates" "(AUR)" on
+    "wlogout" "(AUR)" on
+    "mako" "" on
+    "libnotify" "" on
+    "cliphist" "" on
+    "swappy" "" on
+    "swww" "(AUR)" on
+    "imv" "" on
+    "grim" "" on
+    "slurp" "" on
+    "swaybg" "" on
+    "playerctl" "" on
+    "pamixer" "" on
+    "pavucontrol" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Hyprland :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "hyprpicker") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "waybar-updates") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "swww") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+  fi
+}
+
+plasma() {
+  options=(
+    "plasma" "" on
+    "plasma-wayland-session" "" on
+    "ark" "" on
+    "dolphin" "" on
+    "dolphin-plugins" "" on
+    "ffmpegthumbs" "" on
+    "gwenview" "" on
+    "kalzium" "" off
+    "kate" "" on
+    "kcharselect" "" on
+    "kcolorchooser" "" on
+    "kdeconnect" "" on
+    "kdegraphics-thumbnailers" "" on
+    "kdenetwork-filesharing" "" on
+    "kdesdk-thumbnailers" "" on
+    "kdialog" "" on
+    "kfind" "" on
+    "kio-extras" "" on
+    "kio-gdrive" "" on
+    "kolourpaint" "" on
+    "konsole" "" on
+    "ksystemlog" "" on
+    "ktouch" "" on
+    "lokalize" "" on
+    "okular" "" on
+    "print-manager" "" on
+    "spectacle" "" on
+    "kdiskmark" "" on
+    "packagekit-qt5" "" on
+    "latte-dock" "" off
+    "latte-dock-git" "(AUR)" off
+    "plasma5-applets-virtual-desktop-bar-git" "(AUR)" off
+    "plasma5-applets-window-appmenu-git" "(AUR)" off
+    "sddm-conf-git" "(AUR)" off
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "KDE/Plasma :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "latte-dock-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "plasma5-applets-virtual-desktop-bar-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "plasma5-applets-window-appmenu-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "sddm-conf-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+  fi
+}
+
+gnome() {
+  options=(
+    "baobab" "" on
+    "eog" "" on
+    "evince" "" on
+    "file-roller" "" on
+    "gedit" "" on
+    "gnome-backgrounds" "" on
+    "gnome-calculator" "" on
+    "gnome-calendar" "" on
+    "gnome-characters" "" on
+    "gnome-color-manager" "" on
+    "gnome-control-center" "" on
+    "gnome-disk-utility" "" on
+    "gnome-font-viewer" "" on
+    "gnome-keyring" "" on
+    "gnome-logs" "" on
+    "gnome-menus" "" on
+    "gnome-photos" "" on
+    "gnome-remote-desktop" "" on
+    "gnome-session" "" on
+    "gnome-settings-daemon" "" on
+    "gnome-shell" "" on
+    "gnome-shell-extensions" "" on
+    "gnome-terminal" "" on
+    "gnome-software" "" on
+    "gnome-themes-extra" "" on
+    "gnome-user-docs" "" on
+    "gnome-user-share" "" on
+    "grilo-plugins" "" on
+    "mutter" "" on
+    "nautilus" "" on
+    "sushi" "" on
+    "tracker" "" on
+    "tracker3-miners" "" on
+    "tracker-miners" "" on
+    "xdg-user-dirs-gtk" "" on
+    "gnome-tweaks" "" on
+    "gnome-sudoku" "" on
+    "gnome-sound-recorder" "" on
+    "gnome-nettool" "" on
+    "gnome-mines" "" on
+    "gnome-mahjongg" "" on
+    "gnome-chess" "" on
+    "ghex" "" on
+    "gnome-software-packagekit-plugin" "" on
+    "packagekit" "" on
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Gnome :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+  fi
+}
+
+displaymanager() {
+  options=(
+    "gdm" "Gnome Login"
+    "sddm" "QT5 Login"
+    "sddm-git" "(AUR)"
+    "lxdm" "LXDE Login"
+    "lightdm-gtk-greeter" "Other Login"
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Display Manager :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    case $sel in
+    "gdm")
+      instpkg gdm
+      serviceenable gdm
+      ;;
+    "sddm")
+      instpkg sddm
+      serviceenable sddm
+      ;;
+    "sddm-git")
+      instpkg "" sddm-git
+      serviceenable sddm
+      ;;
+    "lxdm")
+      instpkg lxdm
+      serviceenable lxdm
+      ;;
+    "lightdm-gtk-greeter")
+      instpkg lightdm-gtk-greeter
+      serviceenable lightdm
+      ;;
+    "lightdm-kde-greeter")
+      instpkg lightdm-kde-greeter
+      serviceenable lightdm
+      ;;
+    esac
+  fi
+}
+
+configmenu() {
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Dotfiles" ""
+    "Swap file settings" "systemd-boot kernel module"
+    "Network settings" "For sharing"
+  )
+
+  sel=$(dialog --backtitle "$apptitle" --title "Confg Menu" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = "0" ]; then
+    case ${sel} in
+    "Dotfiles")
+      dotfilesmenu
+      nextitem="Swap file settings"
+      ;;
+    "Swap file settings")
+      if (confirm "Do you want to apply kernel module for hibernation ? \nOnly for systemd-boot loader!!! \n "); then
+        # /etc/kernel/cmdline
+        presentkernelcmdline=$(cat /etc/kernel/cmdline)
+        swapfileuuid=$(findmnt -no UUID -T /swapfile)
+        swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print substr($4, 1, length($4)-2)}')
+        if (echo $presentkernelcmdline | grep "$swapfileuuid"); then
+          clear
+          message "Kernel modules for hibernation already exist... \nCheck /etc/kernel/cmdline"
+        else
+          newkernelcmdline="${presentkernelcmdline} resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
+          echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
+          clear
+          sudo mkinitcpio -P
+        fi
+        # /etc/mkinitcpio.conf - HOOKS
+        presentmkinitcpiohooks=$(cat /etc/mkinitcpio.conf | grep 'HOOKS' | awk -F\) '{print $1}' | tr -d 'HOOKS=(')
+        swapfilehook="resume"
+        if (echo $presentmkinitcpiohooks | grep "$swapfilehook" >/dev/null); then
+          # sleep 1
+          clear
+          message "$swapfilehook -  Related modules already exist in HOOKS... \nCheck /etc/mkinitcpio.conf "
+        else
+          clear
+          sudo sed -i -e 's/fsck/resume fsck/g' /etc/mkinitcpio.conf
+          sudo mkinitcpio -P
+          pressanykey
+        fi
+      else
+        message "aldsakljhdkahsdkj"
+      fi
+      nextitem="Network settings"
+      ;;
+    "Network settings")
+      options=(
+        "samba" "" on
+        "avahi" "" on
+      )
+      sel=$(dialog --backtitle "$apptitle" --title "Network :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      if [ "$?" = "0" ]; then
+        if (pacman -Qs samba); then
+          clear
+          printf "%s\n" \
+            "[global]" \
+            "workgroup = WORKGROUP" \
+            "usershare path = /var/lib/samba/usershares" \
+            "usershare max shares = 100" \
+            "usershare allow guests = yes" \
+            "usershare owner only = yes" \
+            "server string = Samba Server" \
+            "client min protocol = CORE" \
+            "server min protocol = CORE" \
+            "; server max protocol = SMB3" \
+            "server role = standalone server" \
+            "log file = /var/log/samba/%m.log" \
+            "logging = file" \
+            "max log size = 1000" | sudo tee /etc/samba/smb.conf >/dev/null
+          sleep 2
+          serviceenable smb
+          serviceenable nmb
+          sudo systemctl start smb.service nmb.service
+          sudo mkdir /var/lib/samba/usershares
+          sudo groupadd -r sambashare
+          sudo chown root:sambashare /var/lib/samba/usershares
+          sudo chmod 1770 /var/lib/samba/usershares
+          sudo gpasswd sambashare -a $(whoami)
+          sudo smbpasswd -a $(whoami)
+          serviceenable avahi-daemon.service
+        fi
+      fi
+      nextitem="Network settings"
+      ;;
+    esac
+    configmenu "${nextitem}"
+  fi
+}
+
+dotfilesmenu() {
+  backupdir=/home/$(whoami)/.dotfiles/backup
+  clonedir=/home/$(whoami)/.dotfiles/hypr-dot
+  configfiles="$(ls $clonedir/config)"
+  wallpaperdir=$(xdg-user-dir PICTURES)
+  homefiles="
+          .gitconfig
+          .gtkrc-2.0
+          .zshrc
+        "
+
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
+  fi
+
+  options=(
+    "Copy neovim dotfiles" ""
+    "Copy Hyprland dotfiles" ""
+    "Copy ohmyzsh dotfiles" ""
+    "Copy themes" ""
+    "Copy wallpaper" ""
+    "Authorize Hyprland dotfiles" ""
+    "Remove neovim dotfiles" ""
+  )
+
+  sel=$(dialog --backtitle "$apptitle" --title "Dotfiles :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = "0" ]; then
+    case ${sel} in
+    "Copy neovim dotfiles")
+      if (confirm "Do you want to copy nvim config ? \n "); then
+        clear
+        git clone https://github.com/drpars/nvim.git /home/$(whoami)/.config/nvim
+        message "Nvim config files are copied. \n "
+
+        if (confirm "Also do you want to copy nvim for root \n "); then
+          if [ ! -d /root/.config/nvim ]; then
+            sudo mkdir -p /root/.config/nvim
+          fi
+          sudo ln -sf /home/$(whoami)/.config/nvim/* /root/.config/nvim
+          message "Nvim config files are copied for root. \n "
+        fi
+      fi
+      nextitem="Copy Hyprland dotfiles"
+      ;;
+    "Copy Hyprland dotfiles")
+      if (confirm "Do do you want to copy hyprland dotfiles ? \n "); then
+        if [ ! -d hypr-dot ]; then
+          clear
+          git clone https://github.com/drpars/hypr-dot.git
+        fi
+        clear
+        mkdir -p $backupdir/old
+        mkdir -p $clonedir
+        if diff -r hypr-dot $clonedir; then
+          message "$clonedir is up to date."
+        else
+          # different files
+          if (confirm "Dotfiles doesn't exist or out of date. \nDo you want to backup existing dotfiles, if there are ? \n "); then
+            mv $clonedir $backupdir/old
+            message "Old files are backed up to $backupdir/old."
+            cp -r hypr-dot /home/$(whoami)/.dotfiles/
+          else
+            rm -rf $clonedir
+            cp -r hypr-dot /home/$(whoami)/.dotfiles/
+          fi
+        fi
+        # backuo
+        for sel in $configfiles; do
+          if [ -d /home/$(whoami)/.config/$sel ]; then
+            mv /home/$(whoami)/.config/$sel $backupdir
+          elif [ -L /home/$(whoami)/.config/$sel ]; then
+            rm /home/$(whoami)/.config/$sel
+          fi
+        done
+        # ~/.config files
+        ln -sr $clonedir/config/* /home/$(whoami)/.config
+        # ~ files
+        for sel in $homefiles; do
+          if [ ! -f /home/$(whoami)/$sel ]; then
+            ln -sr $clonedir/$sel /home/$(whoami)
+          else
+            mv /home/$(whoami)/$sel $backupdir
+            ln -sr $clonedir/$sel /home/$(whoami)
+          fi
+        done
+      fi
+      nextitem="Copy ohmyzsh dotfiles"
+      ;;
+    "Copy ohmyzsh dotfiles")
+      if (confirm "Do you want to copy necessary files ? \n "); then
+        if [ ! -d hypr-dot ]; then
+          clear
+          git clone https://github.com/drpars/hypr-dot.git
+        fi
+        if [ -f /usr/bin/zsh ]; then
+          message "Oh my zsh will want to replace bash. \nTo continue, \nyou must type exit."
+          if [ ! -d /home/$(whoami)/.ohmyzsh ]; then
+            clear
+            # for home user
+            sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+            git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+            git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+          else
+            message "Oh my zsh is already installed for /home/$(whoami)."
+          fi
+          # for root user
+          if (confirm "Do you want to install also for root ? \n"); then
+            if [ ! -d /root/.ohmyzsh ]; then
+              clear
+              sudo sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+              sudo git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
+              sudo git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+            else
+              message "Oh my zsh is already installed for root."
+            fi
+          fi
+          pressanykey
+        else
+          message "zsh not detected !!"
+        fi
+        if [ -d /root/.ohmyzsh ]; then
+          if [ -f /root/.zshrc ]; then
+            sudo mv /root/.zshrc $backupdir/.zshrc-root
+            sudo ln -sr $clonedir/.zshrc /root/
+          fi
+        fi
+        message "Config files are copied for home user."
+
+      fi
+      nextitem="Copy themes"
+      ;;
+    "Copy themes")
+      message "Working ..."
+      nextitem="Copy wallpaper"
+      ;;
+    "Copy wallpaper")
+      if (confirm "Do do you want to copy wallpapers to $wallpaperdir ? \n "); then
+        if [ -d $wallpaperdir/Wallpaper ]; then
+          message "$wallpaperdir/Wallpaper is exist... \nNothing copied!"
+        else
+          git clone https://github.com/drpars/Wallpaper.git $wallpaperdir
+        fi
+      fi
+      nextitem="Authorize Hyprland dotfiles"
+      ;;
+    "Authorize Hyprland dotfiles")
+      if (confirm "Do you want to authorize $clonedir with github token key?"); then
+        username=$(dialog --backtitle "$apptitle" --title "Authorize hypr-dot repo" --inputbox "Enter your github user name :" 0 0 3>&1 1>&2 2>&3)
+        token=$(dialog --backtitle "$apptitle" --title "Authorize hypr-dot repo" --inputbox "Enter your github token key :" 0 0 3>&1 1>&2 2>&3)
+        clear
+        cd $clonedir
+        git remote set-url origin https://$username:$token@github.com/$username/hypr-dot.git
+        cd ..
+      fi
+      nextitem="Authorize Hyprland dotfiles"
+      ;;
+    "Remove neovim dotfiles")
+      if (confirm "Do you want to remove nvim ? \n "); then
+        clear
+        rm -rf ~/.config/nvim
+        rm -rf ~/.local/share/nvim
+        rm -rf ~/.cache/nvim
+        message "Neovim configs are completely removed. \n "
+      fi
+      nextitem="Remove neovim dotfiles"
+      ;;
+    esac
+    dotfilesmenu "${nextitem}"
+  fi
+}
+
+shutdownmenu() {
+  options=(
+    "Reboot" ""
+    "Shutdown" ""
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Shutdown :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    case $sel in
+    "Reboot")
+      if (confirm "Reboot now ?" --defaultno); then
+        reboot
+      fi
+      ;;
+    "Shutdown")
+      if (confirm "Shutdown now ?" --defaultno); then
+        poweroff
+      fi
+      ;;
+    esac
+  fi
+}
+
+if [ ! $(id -u) = 0 ]; then
+  echo "Arch Linux Installation is starting ..."
+  sudo pacman -S --needed dialog neovim
+  printf "%s\n" \
+    "use_shadow = OFF" \
+    "title_color = (BLACK,WHITE,OFF)" \
+    "button_label_active_color = (WHITE,BLUE,ON)" \
+    "button_label_inactive_color = (BLACK,WHITE,OFF)" \
+    "tag_color = (BLACK,WHITE,OFF)" \
+    "tag_selected_color = (WHITE,BLUE,ON)" \
+    "tag_key_color = (BLACK,WHITE,OFF)" \
+    "tag_key_selected_color = (WHITE,BLUE,ON)" \
+    "check_color = tag_color" \
+    "check_selected_color = tag_selected_color" >colors
+  export DIALOGRC="colors"
+  EDITOR=nvim
+  if (cpumodel "amd"); then
+    cputype="amd"
+  fi
+  if (cpumodel "intel"); then
+    cputype="intel"
+  fi
+  mainmenu
+  rm -rf hypr-dot
+  rm colors
+  clear
+else
+  echo "The script does not run as root."
+  exit 1
+fi
+
+exit 0
