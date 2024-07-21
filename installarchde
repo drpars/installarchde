@@ -953,6 +953,7 @@ themes() {
   options=(
     "qogir-icon-theme" "(AUR)" on
     "mocu-xcursor" "(AUR)" on
+    "tokyonight-gtk-theme-git" "(AUR)" on
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
@@ -966,6 +967,7 @@ themes() {
     for item in $sel; do
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "tokyonight-gtk-theme-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
@@ -1328,7 +1330,8 @@ dotfilesmenu() {
     "Copy neovim dotfiles" ""
     "Copy Hyprland dotfiles" ""
     "Copy ohmyzsh dotfiles" ""
-    "Copy themes" ""
+    "Copy fonts"
+    "Copy sddm themes" ""
     "Copy wallpaper" ""
     "Authorize Hyprland dotfiles" ""
     "Remove neovim dotfiles" ""
@@ -1398,7 +1401,7 @@ dotfilesmenu() {
       nextitem="Copy ohmyzsh dotfiles"
       ;;
     "Copy ohmyzsh dotfiles")
-      if (confirm "Do you want to copy necessary files ? \n "); then
+      if (confirm "Do you want to copy dotfiles ? \n "); then
         if [ ! -d hypr-dot ]; then
           clear
           git clone https://github.com/drpars/hypr-dot.git
@@ -1436,12 +1439,50 @@ dotfilesmenu() {
           fi
         fi
         message "Config files are copied for home user."
-
       fi
-      nextitem="Copy themes"
+      nextitem="Copy fonts"
       ;;
-    "Copy themes")
-      message "Working ..."
+    "Copy fonts")
+      if (confirm "Do you want to copy fonts ? \n "); then
+        if [ ! -d hypr-dot ]; then
+          clear
+          git clone https://github.com/drpars/hypr-dot.git
+        fi
+        message "/home/$(whoami)/.fonts will back up to $backupdir"
+        if [ ! -d /home/$(whoami)/.fonts ]; then
+          ln -sr $clonedir/.fonts /home/$(whoami)
+        else
+          mv /home/$(whoami)/.fonts $backupdir
+        fi
+      fi
+      nextitem="Copy sddm themes"
+      ;;
+    "Copy sddm themes")
+      if (confirm "Do you want to copy themes for sddm ?"); then
+        if [ ! -d hypr-dot ]; then
+          clear
+          git clone https://github.com/drpars/hypr-dot.git
+        fi
+        clear
+        if [ -f /usr/bin/sddm ]; then
+          sddm_conf_dir=/etc/sddm.conf.d
+          if [ ! -d "$sddm_conf_dir" ]; then
+            printf "$sddm_conf_dir not found, creating...\n"
+            sudo mkdir "$sddm_conf_dir"
+          fi
+          echo -e "[Theme]\nCurrent=sugar-candy" | sudo tee "$sddm_conf_dir/10-theme.conf" >/dev/null
+          sudo cp $clonedir/sddm/sddm.conf "$sddm_conf_dir/"
+          sugar_candy_dir=/usr/share/sddm/themes/sugar-candy
+          if [ ! -d "$sugar_candy_dir" ]; then
+            printf "$sugar_candy_dir not found, creating...\n"
+            sudo tar -xzvf $clonedir/sddm/sugar-candy/sugar-candy.tar.gz -C /usr/share/sddm/themes/
+            sudo cp $clonedir/sddm/sugar-candy/theme.conf "$sugar_candy_dir/"
+            sudo cp $clonedir/sddm/sugar-candy/background.jpg "$sugar_candy_dir/Backgrounds/"
+          fi
+        else
+          message "Sddm not installed. \nFirstly install sddm!"
+        fi
+      fi
       nextitem="Copy wallpaper"
       ;;
     "Copy wallpaper")
@@ -1524,9 +1565,10 @@ if [ ! $(id -u) = 0 ]; then
   if (cpumodel "intel"); then
     cputype="intel"
   fi
+  scriptdir=$(pwd)
   mainmenu
-  rm -rf hypr-dot
-  rm colors
+  rm -rf $scriptdir/hypr-dot
+  rm $scriptdir/colors
   clear
 else
   echo "The script does not run as root."
