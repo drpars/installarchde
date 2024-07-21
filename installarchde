@@ -44,10 +44,9 @@ mainmenu() {
 }
 
 resetvalue() {
-  for arg
-do
-  unset ${arg}
-done
+  for arg; do
+    unset ${arg}
+  done
 }
 
 cpumodel() {
@@ -963,23 +962,22 @@ fonts() {
 
 themes() {
   options=(
-    "qogir-icon-theme" "(AUR)" on
-    "mocu-xcursor" "(AUR)" on
-    "tokyonight-gtk-theme-git" "(AUR)" on
+    "qogir-icon-theme" "(AUR)" off
+    "mocu-xcursor" "(AUR)" off
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
     "qt6ct" "" off
-    "qt5ct-kde" "(AUR)" off
-    "qt6ct-kde" "(AUR)" off
+    "qt5ct-kde" "(AUR)" on
+    "qt6ct-kde" "(AUR)" on
     "lightly-kf6-git" "(AUR)" off
+
   )
   sel=$(dialog --backtitle "$apptitle" --title "Themes :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
     for item in $sel; do
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "tokyonight-gtk-theme-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
@@ -988,6 +986,32 @@ themes() {
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
+    if [[ "${aurpkg}" == *"lightly-kf6-git"* ]]; then
+      options=(
+        "lightly-kf5-git" "(AUR)" on
+        "frameworkintegration5" "" on
+        "hicolor-icon-theme" "" on
+        "kcmutils5" "" on
+        "kconfig5" "" on
+        "kcoreaddons5" "" on
+        "kdecoration5" "" on
+        "kguiaddons5" "" on
+        "ki18n5" "" on
+        "kiconthemes5" "" on
+        "kwayland5" "" on
+        "kwindowsystem5" "" on
+        "qt5-declarative" "" on
+        "qt5-x11extras" "" on
+      )
+      sel=$(dialog --backtitle "$apptitle" --title "lightly-kf6 dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      for item in $sel; do
+        case $item in
+        "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        esac
+      done
+      instpkg "$pkg" "$aurpkg"
+    fi
     instpkg "$pkg" "$aurpkg"
   fi
 }
@@ -1353,17 +1377,17 @@ dotfilesmenu() {
   if [ "$?" = "0" ]; then
     case ${sel} in
     "Copy neovim dotfiles")
-      if (confirm "Do you want to copy nvim config ? \n "); then
+      if (confirm "Do you want to copy nvim dotfiles ? \n "); then
         clear
         git clone https://github.com/drpars/nvim.git /home/$(whoami)/.config/nvim
-        message "Nvim config files are copied. \n "
+        message "Nvim dotfiles are copied. \n "
 
         if (confirm "Also do you want to copy nvim for root \n "); then
           if [ ! -d /root/.config/nvim ]; then
             sudo mkdir -p /root/.config/nvim
           fi
           sudo ln -sf /home/$(whoami)/.config/nvim/* /root/.config/nvim
-          message "Nvim config files are copied for root. \n "
+          message "Nvim dotfiles are copied for root. \n "
         fi
       fi
       nextitem="Copy ohmyzsh dotfiles"
@@ -1459,7 +1483,8 @@ dotfilesmenu() {
           message "$wallpaperdir/Wallpaper is exist... \nNothing copied!"
         else
           clear
-          git clone https://github.com/drpars/Wallpaper.git $wallpaperdir
+          mkdir $wallpaperdir/Wallpaper
+          git clone https://github.com/drpars/Wallpaper.git $wallpaperdir/Wallpaper
           pressanykey
         fi
       fi
