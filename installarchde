@@ -43,6 +43,13 @@ mainmenu() {
   fi
 }
 
+resetvalue() {
+  for arg
+do
+  unset ${arg}
+done
+}
+
 cpumodel() {
   cat /proc/cpuinfo | awk '/model name/' | uniq | grep -i "$1" >/dev/null
 }
@@ -87,6 +94,7 @@ instpkg() {
       fi
     fi
   fi
+  resetvalue pkg aurpkg
 }
 
 choosepkg() {
@@ -173,7 +181,7 @@ updatemenu() {
     "Install yay")
       if (confirm "Do you want to install yay ? \n"); then
         clear
-        git clone https://aur.archlinux.org/yay.git
+        git clone https://aur.archlinux.org/yay-bin.git
         cd yay
         makepkg -si
         cd ..
@@ -335,7 +343,7 @@ driversmenu() {
           meson setup build
           meson install -C build
           cd ..
-          rm -r nvidia-vaapi-driver
+          rm -rf nvidia-vaapi-driver
           echo "nvidia-vaapi-driver is successfully installed"
           pressanykey
         fi
@@ -793,6 +801,10 @@ commonapps() {
     for item in $sel; do
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "webapp-manager") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "stacer-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "isomaster") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "startup-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
@@ -1328,11 +1340,11 @@ dotfilesmenu() {
 
   options=(
     "Copy neovim dotfiles" ""
-    "Copy Hyprland dotfiles" ""
     "Copy ohmyzsh dotfiles" ""
-    "Copy fonts"
+    "Copy fonts" ""
     "Copy sddm themes" ""
     "Copy wallpaper" ""
+    "Copy Hyprland dotfiles" ""
     "Authorize Hyprland dotfiles" ""
     "Remove neovim dotfiles" ""
   )
@@ -1353,50 +1365,6 @@ dotfilesmenu() {
           sudo ln -sf /home/$(whoami)/.config/nvim/* /root/.config/nvim
           message "Nvim config files are copied for root. \n "
         fi
-      fi
-      nextitem="Copy Hyprland dotfiles"
-      ;;
-    "Copy Hyprland dotfiles")
-      if (confirm "Do do you want to copy hyprland dotfiles ? \n "); then
-        if [ ! -d hypr-dot ]; then
-          clear
-          git clone https://github.com/drpars/hypr-dot.git
-        fi
-        clear
-        mkdir -p $backupdir/old
-        mkdir -p $clonedir
-        if diff -r hypr-dot $clonedir; then
-          message "$clonedir is up to date."
-        else
-          # different files
-          if (confirm "Dotfiles doesn't exist or out of date. \nDo you want to backup existing dotfiles, if there are ? \n "); then
-            mv $clonedir $backupdir/old
-            message "Old files are backed up to $backupdir/old."
-            cp -r hypr-dot /home/$(whoami)/.dotfiles/
-          else
-            rm -rf $clonedir
-            cp -r hypr-dot /home/$(whoami)/.dotfiles/
-          fi
-        fi
-        # backuo
-        for sel in $configfiles; do
-          if [ -d /home/$(whoami)/.config/$sel ]; then
-            mv /home/$(whoami)/.config/$sel $backupdir
-          elif [ -L /home/$(whoami)/.config/$sel ]; then
-            rm /home/$(whoami)/.config/$sel
-          fi
-        done
-        # ~/.config files
-        ln -sr $clonedir/config/* /home/$(whoami)/.config
-        # ~ files
-        for sel in $homefiles; do
-          if [ ! -f /home/$(whoami)/$sel ]; then
-            ln -sr $clonedir/$sel /home/$(whoami)
-          else
-            mv /home/$(whoami)/$sel $backupdir
-            ln -sr $clonedir/$sel /home/$(whoami)
-          fi
-        done
       fi
       nextitem="Copy ohmyzsh dotfiles"
       ;;
@@ -1490,8 +1458,54 @@ dotfilesmenu() {
         if [ -d $wallpaperdir/Wallpaper ]; then
           message "$wallpaperdir/Wallpaper is exist... \nNothing copied!"
         else
+          clear
           git clone https://github.com/drpars/Wallpaper.git $wallpaperdir
+          pressanykey
         fi
+      fi
+      nextitem="Copy Hyprland dotfiles"
+      ;;
+    "Copy Hyprland dotfiles")
+      if (confirm "Do do you want to copy hyprland dotfiles ? \n "); then
+        if [ ! -d hypr-dot ]; then
+          clear
+          git clone https://github.com/drpars/hypr-dot.git
+        fi
+        clear
+        mkdir -p $backupdir/old
+        mkdir -p $clonedir
+        if diff -r hypr-dot $clonedir; then
+          message "$clonedir is up to date."
+        else
+          # different files
+          if (confirm "Dotfiles doesn't exist or out of date. \nDo you want to backup existing dotfiles, if there are ? \n "); then
+            mv $clonedir $backupdir/old
+            message "Old files are backed up to $backupdir/old."
+            cp -r hypr-dot /home/$(whoami)/.dotfiles/
+          else
+            rm -rf $clonedir
+            cp -r hypr-dot /home/$(whoami)/.dotfiles/
+          fi
+        fi
+        # backuo
+        for sel in $configfiles; do
+          if [ -d /home/$(whoami)/.config/$sel ]; then
+            mv /home/$(whoami)/.config/$sel $backupdir
+          elif [ -L /home/$(whoami)/.config/$sel ]; then
+            rm /home/$(whoami)/.config/$sel
+          fi
+        done
+        # ~/.config files
+        ln -sr $clonedir/config/* /home/$(whoami)/.config
+        # ~ files
+        for sel in $homefiles; do
+          if [ ! -f /home/$(whoami)/$sel ]; then
+            ln -sr $clonedir/$sel /home/$(whoami)
+          else
+            mv /home/$(whoami)/$sel $backupdir
+            ln -sr $clonedir/$sel /home/$(whoami)
+          fi
+        done
       fi
       nextitem="Authorize Hyprland dotfiles"
       ;;
