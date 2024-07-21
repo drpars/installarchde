@@ -886,6 +886,8 @@ gameapps() {
 otherapps() {
   options=(
     "Virt Manager" ""
+    "Qogir icon theme" ""
+    "Tokyonight GTK theme" ""
   )
   sel=$(dialog --backtitle "$apptitle" --title "Other applications :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   case $sel in
@@ -936,6 +938,21 @@ otherapps() {
       fi
     fi
     ;;
+  "Qogir icon theme")
+    clear
+    git clone https://github.com/vinceliuice/Qogir-icon-theme.git
+    sh Qogir-icon-theme/install.sh
+    rm -rf Qogir-icon-theme
+    pressanykey
+    ;;
+  "Tokyonight GTK theme")
+    clear
+    git clone https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git
+    sudo pacman -S gtk-engine-murrine --needed
+    sh Tokyonight-GTK-Theme/themes/install.sh
+    rm -rf Tokyonight-GTK-Theme
+    pressanykey
+    ;;
   esac
 }
 
@@ -962,7 +979,6 @@ fonts() {
 
 themes() {
   options=(
-    "qogir-icon-theme" "(AUR)" off
     "mocu-xcursor" "(AUR)" off
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
