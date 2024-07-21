@@ -1324,6 +1324,13 @@ configmenu() {
       )
       sel=$(dialog --backtitle "$apptitle" --title "Network :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
       if [ "$?" = "0" ]; then
+        for item in $sel; do
+          case $item in
+          # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+          *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+          esac
+        done
+        instpkg "$pkg" "$aurpkg"
         if (pacman -Qs samba); then
           clear
           printf "%s\n" \
@@ -1345,11 +1352,12 @@ configmenu() {
           serviceenable smb
           serviceenable nmb
           sudo systemctl start smb.service nmb.service
-          sudo mkdir /var/lib/samba/usershares
+          sudo mkdir -p /var/lib/samba/usershares
           sudo groupadd -r sambashare
           sudo chown root:sambashare /var/lib/samba/usershares
           sudo chmod 1770 /var/lib/samba/usershares
           sudo gpasswd sambashare -a $(whoami)
+          sudo systemctl restart smb.service nmb.service
           sudo smbpasswd -a $(whoami)
           serviceenable avahi-daemon.service
         fi
@@ -1380,7 +1388,7 @@ dotfilesmenu() {
 
   options=(
     "Copy neovim dotfiles" ""
-    "Copy ohmyzsh dotfiles" ""
+    "Configure ohmyzsh" ""
     "Copy fonts" ""
     "Copy sddm themes" ""
     "Copy wallpaper" ""
@@ -1406,10 +1414,10 @@ dotfilesmenu() {
           message "Nvim dotfiles are copied for root. \n "
         fi
       fi
-      nextitem="Copy ohmyzsh dotfiles"
+      nextitem="Configure ohmyzsh"
       ;;
-    "Copy ohmyzsh dotfiles")
-      if (confirm "Do you want to copy dotfiles ? \n "); then
+    "Configure ohmyzsh")
+      if (confirm "Do you want to configure ohmyzsh ? \n "); then
         if [ ! -d hypr-dot ]; then
           clear
           git clone https://github.com/drpars/hypr-dot.git
@@ -1562,12 +1570,12 @@ dotfilesmenu() {
       nextitem="Authorize Hyprland dotfiles"
       ;;
     "Remove neovim dotfiles")
-      if (confirm "Do you want to remove nvim ? \n "); then
+      if (confirm "Do you want to remove nvim dotfiles ? \n "); then
         clear
         rm -rf ~/.config/nvim
         rm -rf ~/.local/share/nvim
         rm -rf ~/.cache/nvim
-        message "Neovim configs are completely removed. \n "
+        message "Nvim dotfiles are completely removed. \n "
       fi
       nextitem="Remove neovim dotfiles"
       ;;
