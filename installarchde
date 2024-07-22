@@ -1062,7 +1062,7 @@ themes() {
       "Tokyonight GTK theme")
         clear
         git clone https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git
-        sudo pacman -S gtk-engine-murrine --needed
+        instpkg "gtk-engine-murrine"
         sh Tokyonight-GTK-Theme/themes/install.sh
         rm -rf Tokyonight-GTK-Theme
         pressanykey
