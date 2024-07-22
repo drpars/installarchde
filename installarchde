@@ -181,9 +181,10 @@ updatemenu() {
       if (confirm "Do you want to install yay ? \n"); then
         clear
         git clone https://aur.archlinux.org/yay-bin.git
-        cd yay
+        cd yay-bin
         makepkg -si
         cd ..
+        rm -rf yay-bin
         pressanykey
       fi
       nextitem="Install paru"
@@ -578,6 +579,7 @@ appmenu() {
     "Common applications" ""
     "File browsers" ""
     "Multimedia" ""
+    "Theme Engine" ""
     "Games" ""
     "Other" ""
   )
@@ -618,6 +620,10 @@ appmenu() {
       ;;
     "Multimedia")
       multimediaapps
+      nextitem="Theme Engine"
+      ;;
+    "Theme Engine")
+      themeengine
       nextitem="Games"
       ;;
     "Games")
@@ -694,6 +700,7 @@ programmingapps() {
     # others
     "go" "" on
     "npm" "" on
+    "yarn" "" on
     "xmlstarlet" "" on
     "luarocks" "" on
     "ruby" "" on
@@ -788,6 +795,9 @@ commonapps() {
   options=(
     "libreoffice-fresh" "" off
     "libreoffice-still" "" off
+    "waydroid" "(AUR)" on
+    "waydroid-settings-git" "(AUR)" on
+    "binder_linux-dkms" "(AUR)" on
     "mousepad" "" on
     "bleachbit" "Profile cleaner" off
     "webapp-manager" "(AUR)" on
@@ -800,6 +810,8 @@ commonapps() {
     for item in $sel; do
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "waydroid-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "waydroid") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "webapp-manager") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "stacer-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "isomaster") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
@@ -808,6 +820,17 @@ commonapps() {
       esac
     done
     instpkg "$pkg" "$aurpkg"
+    if [[ "${aurpkg}" == *"waydroid"* ]]; then
+      if (pacman -Qs waydroid); then
+        if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to configure waydroid ? \n "); then
+          clear
+          echo "waydroid init"
+          sudo waydroid init
+          sudo modprobe binder-linux device=binder,hwbinder,vndbinder
+          serviceenable waydroid-container.service
+        fi
+      fi
+    fi
   fi
 }
 
@@ -865,6 +888,59 @@ multimediaapps() {
   fi
 }
 
+themeengine() {
+  options=(
+    "kvantum" "(QT6)" off
+    "kvantum-qt5" "(QT5)" off
+    "qt5ct" "" off
+    "qt6ct" "" off
+    "qt5ct-kde" "(AUR)" on
+    "qt6ct-kde" "(AUR)" on
+    "lightly-kf6-git" "(AUR)" off
+
+  )
+  sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    if [[ "${aurpkg}" == *"lightly-kf6-git"* ]]; then
+      options=(
+        "lightly-kf5-git" "(AUR)" on
+        "frameworkintegration5" "" on
+        "hicolor-icon-theme" "" on
+        "kcmutils5" "" on
+        "kconfig5" "" on
+        "kcoreaddons5" "" on
+        "kdecoration5" "" on
+        "kguiaddons5" "" on
+        "ki18n5" "" on
+        "kiconthemes5" "" on
+        "kwayland5" "" on
+        "kwindowsystem5" "" on
+        "qt5-declarative" "" on
+        "qt5-x11extras" "" on
+      )
+      sel=$(dialog --backtitle "$apptitle" --title "lightly-kf6 dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      for item in $sel; do
+        case $item in
+        "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        esac
+      done
+      instpkg "$pkg" "$aurpkg"
+    fi
+    instpkg "$pkg" "$aurpkg"
+  fi
+}
+
 gameapps() {
   options=(
     "steam" "" on
@@ -886,8 +962,6 @@ gameapps() {
 otherapps() {
   options=(
     "Virt Manager" ""
-    "Qogir icon theme" ""
-    "Tokyonight GTK theme" ""
   )
   sel=$(dialog --backtitle "$apptitle" --title "Other applications :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   case $sel in
@@ -895,7 +969,7 @@ otherapps() {
     options=(
       "libvirt" "" on
       "qemu-full" "" on
-      "iptables-nft" "" on
+      "iptables-nft" "" off
       "dnsmasq" "" on
       "openbsd-netcat" "" on
       "dmidecode" "" on
@@ -934,24 +1008,8 @@ otherapps() {
             "group = \"$(whoami)\"" | sudo tee -a /etc/libvirt/qemu.conf >/dev/null
         fi
         serviceenable libvirtd.service
-        pressanykey
       fi
     fi
-    ;;
-  "Qogir icon theme")
-    clear
-    git clone https://github.com/vinceliuice/Qogir-icon-theme.git
-    sh Qogir-icon-theme/install.sh
-    rm -rf Qogir-icon-theme
-    pressanykey
-    ;;
-  "Tokyonight GTK theme")
-    clear
-    git clone https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git
-    sudo pacman -S gtk-engine-murrine --needed
-    sh Tokyonight-GTK-Theme/themes/install.sh
-    rm -rf Tokyonight-GTK-Theme
-    pressanykey
     ;;
   esac
 }
@@ -978,58 +1036,46 @@ fonts() {
 }
 
 themes() {
-  options=(
-    "mocu-xcursor" "(AUR)" off
-    "kvantum" "(QT6)" off
-    "kvantum-qt5" "(QT5)" off
-    "qt5ct" "" off
-    "qt6ct" "" off
-    "qt5ct-kde" "(AUR)" on
-    "qt6ct-kde" "(AUR)" on
-    "lightly-kf6-git" "(AUR)" off
-
-  )
-  sel=$(dialog --backtitle "$apptitle" --title "Themes :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
-    for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "mocu-xcursor") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
-    done
-    if [[ "${aurpkg}" == *"lightly-kf6-git"* ]]; then
-      options=(
-        "lightly-kf5-git" "(AUR)" on
-        "frameworkintegration5" "" on
-        "hicolor-icon-theme" "" on
-        "kcmutils5" "" on
-        "kconfig5" "" on
-        "kcoreaddons5" "" on
-        "kdecoration5" "" on
-        "kguiaddons5" "" on
-        "ki18n5" "" on
-        "kiconthemes5" "" on
-        "kwayland5" "" on
-        "kwindowsystem5" "" on
-        "qt5-declarative" "" on
-        "qt5-x11extras" "" on
-      )
-      sel=$(dialog --backtitle "$apptitle" --title "lightly-kf6 dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-      for item in $sel; do
-        case $item in
-        "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-        esac
-      done
-      instpkg "$pkg" "$aurpkg"
-    fi
-    instpkg "$pkg" "$aurpkg"
+  if [ "${1}" = "" ]; then
+    nextitem="."
+  else
+    nextitem=${1}
   fi
+
+  options=(
+    "Qogir icon theme" ""
+    "Tokyonight GTK theme" ""
+    "Mocu xcursor" ""
+  )
+
+  sel=$(dialog --backtitle "$apptitle" --title "Themes :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  if [ "$?" = 0 ]; then
+      case $sel in
+      "Qogir icon theme")
+        clear
+        git clone https://github.com/vinceliuice/Qogir-icon-theme.git
+        sh Qogir-icon-theme/install.sh
+        rm -rf Qogir-icon-theme
+        pressanykey
+        nextitem="Tokyonight GTK theme"
+        ;;
+      "Tokyonight GTK theme")
+        clear
+        git clone https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git
+        sudo pacman -S gtk-engine-murrine --needed
+        sh Tokyonight-GTK-Theme/themes/install.sh
+        rm -rf Tokyonight-GTK-Theme
+        pressanykey
+        nextitem="Mocu xcursor"
+        ;;
+      "Mocu xcursor")
+        instpkg "" "mocu-xcursor"
+        nextitem="Mocu xcursor"
+        ;;
+      esac
+    # themes "${nextitem}"
+  fi
+
 }
 
 demenu() {
@@ -1079,8 +1125,8 @@ hyprland() {
     "qt6-wayland" "" on
     "kitty" "" on
     "rofi-wayland" "" on
-    "polkit-kde-agent" "" off
-    "polkit-gnome" "" on
+    "polkit-kde-agent" "" on
+    "polkit-gnome" "" off
     "waybar" "" on
     "waybar-updates" "(AUR)" on
     "wlogout" "(AUR)" on
@@ -1104,6 +1150,7 @@ hyprland() {
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "hyprpicker") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "waybar-updates") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "wlogout") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "swww") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
@@ -1393,6 +1440,7 @@ dotfilesmenu() {
     "Copy sddm themes" ""
     "Copy wallpaper" ""
     "Copy Hyprland dotfiles" ""
+    "Authorize Neovim dotfiles" ""
     "Authorize Hyprland dotfiles" ""
     "Remove neovim dotfiles" ""
   )
@@ -1450,7 +1498,7 @@ dotfilesmenu() {
         fi
         if [ -d /root/.ohmyzsh ]; then
           if [ -f /root/.zshrc ]; then
-            sudo mv /root/.zshrc $backupdir/.zshrc-root
+            sudo rm /root/.zshrc
             sudo ln -sr $clonedir/.zshrc /root/
           fi
         fi
@@ -1556,6 +1604,16 @@ dotfilesmenu() {
           fi
         done
       fi
+      nextitem="Authorize Neovim dotfiles"
+      ;;
+    "Authorize Neovim dotfiles")
+      if (confirm "Do you want to authorize /home/$(whoami)/.config/nvim with github token key?"); then
+        username=$(dialog --backtitle "$apptitle" --title "Authorize nvim repo" --inputbox "Enter your github user name :" 0 0 3>&1 1>&2 2>&3)
+        token=$(dialog --backtitle "$apptitle" --title "Authorize nvim repo" --inputbox "Enter your github token key :" 0 0 3>&1 1>&2 2>&3)
+        clear
+        cd /home/$(whoami)/.config/nvim
+        git remote set-url origin https://$username:$token@github.com/$username/nvim.git
+      fi
       nextitem="Authorize Hyprland dotfiles"
       ;;
     "Authorize Hyprland dotfiles")
@@ -1565,16 +1623,15 @@ dotfilesmenu() {
         clear
         cd $clonedir
         git remote set-url origin https://$username:$token@github.com/$username/hypr-dot.git
-        cd ..
       fi
       nextitem="Authorize Hyprland dotfiles"
       ;;
     "Remove neovim dotfiles")
       if (confirm "Do you want to remove nvim dotfiles ? \n "); then
         clear
-        rm -rf ~/.config/nvim
-        rm -rf ~/.local/share/nvim
-        rm -rf ~/.cache/nvim
+        rm -rf /home/$(whoami)/.config/nvim
+        rm -rf /home/$(whoami)/.local/share/nvim
+        rm -rf /home/$(whoami)/.cache/nvim
         message "Nvim dotfiles are completely removed. \n "
       fi
       nextitem="Remove neovim dotfiles"
