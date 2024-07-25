@@ -58,11 +58,11 @@ gpumodel() {
 }
 
 confirm() {
-  dialog --backtitle "$apptitle" $2 --yesno "$1" 0 0
+  dialog --backtitle "$apptitle" --yesno "$1" 0 0
 }
 
 message() {
-  dialog --backtitle "$apptitle" $2 --msgbox "$1" 0 0
+  dialog --backtitle "$apptitle" --msgbox "$1" 0 0
 }
 
 pressanykey() {
@@ -178,10 +178,10 @@ updatemenu() {
   if [ "$?" = 0 ]; then
     case ${sel} in
     "Install yay")
-      if (confirm "Do you want to install yay ? \n"); then
+      if (confirm "Do you want to install yay ? \n "); then
         clear
         git clone https://aur.archlinux.org/yay-bin.git
-        cd yay-bin
+        cd yay-bin || return
         makepkg -si
         cd ..
         rm -rf yay-bin
@@ -190,11 +190,11 @@ updatemenu() {
       nextitem="Install paru"
       ;;
     "Install paru")
-      if (confirm "Do you want to install paru ?" \n); then
+      if (confirm "Do you want to install paru ? \n "); then
         # Paru
         clear
         git clone https://aur.archlinux.org/paru.git
-        cd paru
+        cd paru || return
         makepkg -si
         cd ..
         pressanykey
@@ -642,6 +642,7 @@ appmenu() {
 consoleapps() {
   options=(
     "cmatrix" "" off
+    "fastfetch" "" on
     "mpv" "" on
     "mc" "" on
     "mlocate" "" on
@@ -796,7 +797,6 @@ commonapps() {
     "libreoffice-fresh" "" off
     "libreoffice-still" "" off
     "waydroid" "(AUR)" on
-    "waydroid-settings-git" "(AUR)" on
     "binder_linux-dkms" "(AUR)" on
     "mousepad" "" on
     "bleachbit" "Profile cleaner" off
@@ -807,11 +807,42 @@ commonapps() {
   )
   sel=$(dialog --backtitle "$apptitle" --title "Common applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
+    if (! pacman -Qs linux-zen); then
+      if [[ "${sel}" == *"waydroid"* ]]; then
+        if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to install waydroid ? \n "); then
+          options=(
+            "python-pyclip" "(AUR)" on
+            "waydroid-settings-git" "(AUR)" on
+          )
+          sel=$(dialog --backtitle "$apptitle" --title "Waydroid dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+          for item in $sel; do
+            case $item in
+            "binder_linux-dkms") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+            "python-pyclip") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+            *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+            esac
+          done
+          instpkg "$pkg" "$aurpkg"
+          presentkernelcmdline=$(cat /etc/kernel/cmdline)
+          if (echo $presentkernelcmdline | grep "binder"); then
+            clear
+            echo "binder-linux kernel modules are already exist."
+            pressanykey
+          else
+            newkernelcmdline="${presentkernelcmdline} device=binder,hwbinder,vndbinder"
+            echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
+            sudo mkinitcpio -P
+            serviceenable waydroid-container.service
+            message "Waydroid is successfully installed. \nPlease rebbot before run!"
+          fi
+        fi
+      fi
+    fi
     for item in $sel; do
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "waydroid-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "waydroid") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "waydroid-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "webapp-manager") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "stacer-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "isomaster") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
@@ -820,17 +851,12 @@ commonapps() {
       esac
     done
     instpkg "$pkg" "$aurpkg"
-    if [[ "${aurpkg}" == *"waydroid"* ]]; then
-      if (pacman -Qs waydroid); then
-        if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to configure waydroid ? \n "); then
-          clear
-          echo "waydroid init"
-          sudo waydroid init
-          sudo modprobe binder-linux device=binder,hwbinder,vndbinder
-          serviceenable waydroid-container.service
-        fi
-      fi
-    fi
+    for item in $sel; do
+      case $item in
+      "libreoffice-fresh") choosepkg "libreoffice-fresh-" ;;
+      "libreoffice-still") choosepkg "libreoffice-still-" ;;
+      esac
+    done
   fi
 }
 
@@ -896,21 +922,11 @@ themeengine() {
     "qt6ct" "" off
     "qt5ct-kde" "(AUR)" on
     "qt6ct-kde" "(AUR)" on
-    "lightly-kf6-git" "(AUR)" off
+    "lightly-kf6-git" "(AUR)" on
 
   )
   sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
-    for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
-    done
     if [[ "${aurpkg}" == *"lightly-kf6-git"* ]]; then
       options=(
         "lightly-kf5-git" "(AUR)" on
@@ -937,6 +953,16 @@ themeengine() {
       done
       instpkg "$pkg" "$aurpkg"
     fi
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
     instpkg "$pkg" "$aurpkg"
   fi
 }
@@ -966,10 +992,11 @@ otherapps() {
   sel=$(dialog --backtitle "$apptitle" --title "Other applications :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   case $sel in
   "Virt Manager")
+    message "Current virt manager installation causes waybar to crashes"
     options=(
       "libvirt" "" on
       "qemu-full" "" on
-      "iptables-nft" "" off
+      "iptables-nft" "" on
       "dnsmasq" "" on
       "openbsd-netcat" "" on
       "dmidecode" "" on
@@ -1022,6 +1049,7 @@ fonts() {
     "ttf-ubuntu-mono-nerd" "" on
     "ttf-hack-nerd" "" on
     "ttf-firacode-nerd" "" on
+    "otf-font-awesome" "" on
   )
   sel=$(dialog --backtitle "$apptitle" --title "Fonts :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
