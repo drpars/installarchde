@@ -992,18 +992,14 @@ otherapps() {
   sel=$(dialog --backtitle "$apptitle" --title "Other applications :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   case $sel in
   "Virt Manager")
-    message "Current virt manager installation causes waybar to crashes"
     options=(
       "libvirt" "" on
-      "qemu-full" "" on
       "iptables-nft" "" on
       "dnsmasq" "" on
       "openbsd-netcat" "" on
       "dmidecode" "" on
+      "qemu-desktop" "" on
       "virt-manager" "" on
-      "libguestfs" "" on
-      "edk2-ovmf" "" on
-      "libvirt-python" "" on
     )
     sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
     if [ "$?" = 0 ]; then
@@ -1015,18 +1011,19 @@ otherapps() {
       done
       instpkg "$pkg" "$aurpkg"
       if (pacman -Qs libvirt >/dev/null); then
-        if (cat /etc/nsswitch.conf | grep "$(cat /etc/hostname)") >/dev/null; then
-          echo "/etc/nsswitch.conf is already modified..."
+
+        if (cat /etc/libvirt/libvirtd.conf | grep "unix_sock_group = 'libvirt'") >/dev/null; then
+          echo "/etc/libvirt/libvirtd.conf is already modified..."
+          pressanykey
         else
           printf "%s\n" \
             "" \
-            "hosts: files libvirt libvirt_guest dns $(cat /etc/hostname)" | sudo tee -a /etc/nsswitch.conf >/dev/null
-        fi
-        if [ ! -f /etc/modprobe.d/kvm_$cputype.conf ]; then
-          printf "options kvm_$cputype nested=1" | sudo tee -a /etc/modprobe.d/kvm_$cputype.conf >/dev/null
+            "unix_sock_group = 'libvirt'" \
+            "unix_sock_rw_perms = '0770'" | sudo tee -a /etc/libvirt/libvirtd.conf >/dev/null
         fi
         if (cat /etc/libvirt/qemu.conf | grep "$(whoami)") >/dev/null; then
           echo "/etc/libvirt/qemu.conf is already modified..."
+          pressanykey
         else
           printf "%s\n" \
             "" \
@@ -1034,7 +1031,22 @@ otherapps() {
             "user = \"$(whoami)\"" \
             "group = \"$(whoami)\"" | sudo tee -a /etc/libvirt/qemu.conf >/dev/null
         fi
+        if (cat /etc/libvirt/network.conf | grep "firewall_backend=\"iptables\"") >/dev/null; then
+          echo "/etc/libvirt/network.conf is already modified..."
+          pressanykey
+        else
+          printf "%s\n" \
+            "" \
+            "firewall_backend=\"iptables\"" | sudo tee -a /etc/libvirt/network.conf >/dev/null
+        fi
+        # /etc/mkinitcpio.conf
+        # MODULES=(virtio virtio_blk virtio_pci virtio_net)
+        sudo groupadd libvirt
+        sudo gpasswd -a drpars libvirt
         serviceenable libvirtd.service
+        serviceenable libvirtd.socket
+        serviceenable virtlogd.service
+        serviceenable virtlockd.socket
       fi
     fi
     ;;
