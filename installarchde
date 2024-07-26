@@ -797,8 +797,8 @@ commonapps() {
     "libreoffice-fresh" "" off
     "libreoffice-still" "" off
     "waydroid" "(AUR)" on
-    "binder_linux-dkms" "(AUR)" on
-    "mousepad" "" on
+    "mousepad" "" off
+    "gnome-text-editor" "" off
     "bleachbit" "Profile cleaner" off
     "webapp-manager" "(AUR)" on
     "stacer-bin" "(AUR)" off
@@ -811,6 +811,7 @@ commonapps() {
       if [[ "${sel}" == *"waydroid"* ]]; then
         if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to install waydroid ? \n "); then
           options=(
+            "binder_linux-dkms" "(AUR)" on
             "python-pyclip" "(AUR)" on
             "waydroid-settings-git" "(AUR)" on
           )
@@ -819,6 +820,7 @@ commonapps() {
             case $item in
             "binder_linux-dkms") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
             "python-pyclip") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+            "waydroid-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
             *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
             esac
           done
