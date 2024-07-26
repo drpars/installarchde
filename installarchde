@@ -747,10 +747,10 @@ filesystemsapps() {
 systemapps() {
   options=(
     "gparted" "(GTK) Partitions manager" off
-    "acpi" "" off
-    "acpi_call-dkms" "" off
-    "lm_sensors" "" off
-    "lib32-lm_sensors" "" off
+    "acpi" "" on
+    "acpi_call-dkms" "" on
+    "lm_sensors" "" on
+    "lib32-lm_sensors" "" on
     "os-prober" "Detect OS for multi-boot (grub)" off
   )
   sel=$(dialog --backtitle "$apptitle" --title "System applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
