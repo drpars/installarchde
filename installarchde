@@ -1645,6 +1645,12 @@ dotfilesmenu() {
           sudo rm /root/.zshrc
           sudo ln -sr $clonedir/.zshrc /root/.zshrc
         fi
+        if [ ! -d /usr/share/gnome-text-editor/styles/ ]; then
+          mkdir -p /usr/share/gnome-text-editor/styles
+          if [ ! -f /usr/share/gnome-text-editor/styles/tokyonight-dark.xml ]; then
+            sudo cp $clonedir/gnome-text-editor/tokyonight-dark.xml /usr/share/gnome-text-editor/styles
+          fi
+        fi
         message "Updated hyprland dotfiles are added to /home/$(whoami)/.config folder. "
       fi
       nextitem="Authorize Neovim dotfiles"
