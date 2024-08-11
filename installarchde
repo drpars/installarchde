@@ -807,6 +807,24 @@ commonapps() {
   )
   sel=$(dialog --backtitle "$apptitle" --title "Common applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "waydroid") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "webapp-manager") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "stacer-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "isomaster") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "startup-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+    for item in $sel; do
+      case $item in
+      "libreoffice-fresh") choosepkg "libreoffice-fresh-" ;;
+      "libreoffice-still") choosepkg "libreoffice-still-" ;;
+      esac
+    done
     if (! pacman -Qs linux-zen); then
       if [[ "${sel}" == *"waydroid"* ]]; then
         if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to install waydroid ? \n "); then
@@ -840,25 +858,6 @@ commonapps() {
         fi
       fi
     fi
-    for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "waydroid") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "waydroid-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "webapp-manager") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "stacer-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "isomaster") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "startup-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
-    done
-    instpkg "$pkg" "$aurpkg"
-    for item in $sel; do
-      case $item in
-      "libreoffice-fresh") choosepkg "libreoffice-fresh-" ;;
-      "libreoffice-still") choosepkg "libreoffice-still-" ;;
-      esac
-    done
   fi
 }
 
@@ -876,6 +875,7 @@ filebrowsersapps() {
     "thunar-shares-plugin" "(AUR)" off
     "file-roller" "" off
     "tumbler" "" on
+    "yazi" "" on
   )
   sel=$(dialog --backtitle "$apptitle" --title "File browsers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
@@ -887,6 +887,27 @@ filebrowsersapps() {
       esac
     done
     instpkg "$pkg" "$aurpkg"
+    if [[ "${sel}" == *"yazi"* ]]; then
+      options=(
+        "ffmpegthumbnailer" "" on
+        "p7zip" "" on
+        "jq" "" on
+        "poppler" "" on
+        "fd" "" on
+        "ripgrep" "" on
+        "fzf" "" on
+        "zoxide" "" on
+        "imagemagick" "" on
+      )
+      sel=$(dialog --backtitle "$apptitle" --title "Yazi dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      for item in $sel; do
+        case $item in
+        # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        esac
+      done
+      instpkg "$pkg" "$aurpkg"
+    fi
   fi
 }
 
@@ -929,7 +950,18 @@ themeengine() {
   )
   sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
-    if [[ "${aurpkg}" == *"lightly-kf6-git"* ]]; then
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
+    if [[ "${sel}" == *"lightly-kf6-git"* ]]; then
       options=(
         "lightly-kf5-git" "(AUR)" on
         "frameworkintegration5" "" on
@@ -955,17 +987,6 @@ themeengine() {
       done
       instpkg "$pkg" "$aurpkg"
     fi
-    for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
-    done
-    instpkg "$pkg" "$aurpkg"
   fi
 }
 
