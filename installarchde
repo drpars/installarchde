@@ -950,17 +950,6 @@ themeengine() {
   )
   sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
-    for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
-    done
-    instpkg "$pkg" "$aurpkg"
     if [[ "${sel}" == *"lightly-kf6-git"* ]]; then
       options=(
         "lightly-kf5-git" "(AUR)" on
@@ -987,6 +976,17 @@ themeengine() {
       done
       instpkg "$pkg" "$aurpkg"
     fi
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
