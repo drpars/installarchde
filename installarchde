@@ -1662,6 +1662,9 @@ dotfilesmenu() {
             ln -sr $clonedir/$selhomefiles /home/$(whoami)
           fi
         done
+        if (pacman -Qs bat); then
+          bat cache --build
+        fi
         if [ -f /root/.zshrc ]; then
           sudo rm /root/.zshrc
           sudo ln -sr $clonedir/.zshrc /root/.zshrc
