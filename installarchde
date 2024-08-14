@@ -827,7 +827,7 @@ commonapps() {
     done
     if (! pacman -Qs linux-zen); then
       if [[ "${sel}" == *"waydroid"* ]]; then
-        if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to install waydroid ? \n "); then
+        if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to install binder_linux-dkms for waydroid ? \n "); then
           options=(
             "binder_linux-dkms" "(AUR)" on
             "python-pyclip" "(AUR)" on
@@ -949,17 +949,6 @@ themeengine() {
   )
   sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
-    for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
-    done
-    instpkg "$pkg" "$aurpkg"
     if [[ "${sel}" == *"lightly-kf6-git"* ]]; then
       options=(
         "frameworkintegration5" "" on
@@ -976,8 +965,8 @@ themeengine() {
         "qt5-declarative" "" on
         "qt5-x11extras" "" on
       )
-      sel=$(dialog --backtitle "$apptitle" --title "lightly-kf5 dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-      for item in $sel; do
+      selkf6=$(dialog --backtitle "$apptitle" --title "lightly-kf6 dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      for item in $selkf6; do
         case $item in
         # "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
         *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
@@ -988,8 +977,8 @@ themeengine() {
       options=(
         "lightly-kf5-git" "(AUR)" on
       )
-      sel=$(dialog --backtitle "$apptitle" --title "lightly-kf5 :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-      for item in $sel; do
+      selkf5=$(dialog --backtitle "$apptitle" --title "lightly-kf5 :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      for item in $selkf5; do
         case $item in
         "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
         *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
@@ -997,6 +986,17 @@ themeengine() {
       done
       instpkg "$pkg" "$aurpkg"
     fi
+    for item in $sel; do
+      case $item in
+      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
@@ -1077,9 +1077,9 @@ otherapps() {
         sudo groupadd libvirt
         sudo gpasswd -a drpars libvirt
         serviceenable libvirtd.service
-        serviceenable libvirtd.socket
+        # serviceenable libvirtd.socket
         serviceenable virtlogd.service
-        serviceenable virtlockd.socket
+        # serviceenable virtlockd.socket
       fi
     fi
     ;;
@@ -1203,7 +1203,7 @@ hyprland() {
     "waybar" "" on
     "waybar-updates" "(AUR)" on
     "wlogout" "(AUR)" on
-    "wlogout-git" "(AUR)" on
+    "wlogout-git" "(AUR)" off
     "mako" "" on
     "libnotify" "" on
     "cliphist" "" on
@@ -1216,6 +1216,7 @@ hyprland() {
     "playerctl" "" on
     "pamixer" "" on
     "pavucontrol" "" on
+    "iwgtk" "(AUR)" on
   )
   sel=$(dialog --backtitle "$apptitle" --title "Hyprland :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
@@ -1227,6 +1228,7 @@ hyprland() {
       "wlogout") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "wlogout-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "swww") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "iwgtk") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
@@ -1492,10 +1494,10 @@ configmenu() {
 }
 
 dotfilesmenu() {
-  backupdir=/home/$(whoami)/.dotfiles/backup
-  clonedir=/home/$(whoami)/.dotfiles/hypr-dot
+  backupdir="/home/$(whoami)/.dotfiles/backup"
+  clonedir="/home/$(whoami)/.dotfiles/hypr-dot"
   configfiles="$(ls $clonedir/config)"
-  wallpaperdir=$(xdg-user-dir PICTURES)
+  wallpaperdir="$(xdg-user-dir PICTURES)"
   homefiles="
           .gitconfig
           .gtkrc-2.0
@@ -1587,7 +1589,7 @@ dotfilesmenu() {
       nextitem="Copy sddm themes"
       ;;
     "Copy sddm themes")
-      message "You have to reboot system after sddm installation ! \nIf you want to succeed copying sddm theme !"
+      # message "You have to reboot system after sddm installation ! \nIf you want to succeed copying sddm theme !"
       if (confirm "Do you want to copy themes for sddm ?"); then
         if [ ! -d hypr-dot ]; then
           clear
@@ -1595,8 +1597,8 @@ dotfilesmenu() {
         fi
         clear
         if [ -f /usr/bin/sddm ]; then
-          sddm_conf_dir=/etc/sddm.conf.d
-          if [ ! -d "$sddm_conf_dir" ]; then
+          sddm_conf_dir="/etc/sddm.conf.d"
+          if [ ! -d $sddm_conf_dir ]; then
             message "$sddm_conf_dir not found, creating...\n"
             sudo mkdir $sddm_conf_dir
           fi
@@ -1680,10 +1682,10 @@ dotfilesmenu() {
           sudo rm /root/.zshrc
           sudo ln -sr $clonedir/.zshrc /root/.zshrc
         fi
-        if [ ! -d /usr/share/gnome-text-editor/styles/ ]; then
+        if [ ! -d /usr/share/gnome-text-editor/styles ]; then
           mkdir -p /usr/share/gnome-text-editor/styles
           if [ ! -f /usr/share/gnome-text-editor/styles/tokyonight-dark.xml ]; then
-            sudo cp $clonedir/gnome-text-editor/tokyonight-dark.xml /usr/share/gnome-text-editor/styles
+            sudo cp $clonedir/gnome-text-editor/tokyonight-dark.xml /usr/share/gnome-text-editor/styles/
           fi
         fi
         message "Updated hyprland dotfiles are added to /home/$(whoami)/.config folder. "
