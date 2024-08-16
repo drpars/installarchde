@@ -79,14 +79,14 @@ instpkg() {
   if [ ! "$2" = "" ]; then
     if [ -f /usr/bin/yay ]; then
       clear
-      echo "# sudo -u $(whoami) yay -S --needed $2"
-      sudo -u $(whoami) yay -S --needed $2
+      echo "# sudo -u $localuser yay -S --needed $2"
+      sudo -u $localuser yay -S --needed $2
       pressanykey
     else
       if [ -f /usr/bin/paru ]; then
         clear
-        echo "# sudo -u $(whoami) paru -S --needed $2"
-        sudo -u $(whoami) paru -S --needed $2
+        echo "# sudo -u $localuser paru -S --needed $2"
+        sudo -u $localuser paru -S --needed $2
         pressanykey
       else
         echo "To install AUR packages, you need to install an aurhelper in Upadte menu !"
@@ -143,6 +143,13 @@ servicserviceedisable() {
     echo "systemctl disable $1"
     sudo systemctl disable $1
     pressanykey
+  fi
+}
+
+ishyprdot() {
+  if [ ! -d hypr-dot ]; then
+    clear
+    git clone https://github.com/drpars/hypr-dot.git
   fi
 }
 
@@ -1054,15 +1061,15 @@ otherapps() {
             "unix_sock_group = 'libvirt'" \
             "unix_sock_rw_perms = '0770'" | sudo tee -a /etc/libvirt/libvirtd.conf >/dev/null
         fi
-        if (cat /etc/libvirt/qemu.conf | grep "$(whoami)") >/dev/null; then
+        if (cat /etc/libvirt/qemu.conf | grep "$localuser") >/dev/null; then
           echo "/etc/libvirt/qemu.conf is already modified..."
           pressanykey
         else
           printf "%s\n" \
             "" \
             "# User Settings" \
-            "user = \"$(whoami)\"" \
-            "group = \"$(whoami)\"" | sudo tee -a /etc/libvirt/qemu.conf >/dev/null
+            "user = \"$localuser\"" \
+            "group = \"$localuser\"" | sudo tee -a /etc/libvirt/qemu.conf >/dev/null
         fi
         if (cat /etc/libvirt/network.conf | grep "firewall_backend=\"iptables\"") >/dev/null; then
           echo "/etc/libvirt/network.conf is already modified..."
@@ -1480,9 +1487,9 @@ configmenu() {
           sudo groupadd -r sambashare
           sudo chown root:sambashare /var/lib/samba/usershares
           sudo chmod 1770 /var/lib/samba/usershares
-          sudo gpasswd sambashare -a $(whoami)
+          sudo gpasswd sambashare -a $localuser
           sudo systemctl restart smb.service nmb.service
-          sudo smbpasswd -a $(whoami)
+          sudo smbpasswd -a $localuser
           serviceenable avahi-daemon.service
         fi
       fi
@@ -1494,8 +1501,8 @@ configmenu() {
 }
 
 dotfilesmenu() {
-  backupdir="/home/$(whoami)/.dotfiles/backup"
-  clonedir="/home/$(whoami)/.dotfiles/hypr-dot"
+  backupdir="/home/$localuser/.dotfiles/backup"
+  clonedir="/home/$localuser/.dotfiles/hypr-dot"
   configfiles="$(ls $clonedir/config)"
   wallpaperdir="$(xdg-user-dir PICTURES)"
   homefiles="
@@ -1528,14 +1535,14 @@ dotfilesmenu() {
     "Copy neovim dotfiles")
       if (confirm "Do you want to copy nvim dotfiles ? \n "); then
         clear
-        git clone https://github.com/drpars/nvim.git /home/$(whoami)/.config/nvim
+        git clone https://github.com/drpars/nvim.git /home/$localuser/.config/nvim
         message "Nvim dotfiles are copied. \n "
 
         if (confirm "Also do you want to copy nvim for root \n "); then
           if [ ! -d /root/.config/nvim ]; then
             sudo mkdir -p /root/.config/nvim
           fi
-          sudo ln -sf /home/$(whoami)/.config/nvim/* /root/.config/nvim
+          sudo ln -sf /home/$localuser/.config/nvim/* /root/.config/nvim
           message "Nvim dotfiles are copied for root. \n "
         fi
       fi
@@ -1545,14 +1552,14 @@ dotfilesmenu() {
       if (confirm "Do you want to install ohmyzsh ? \n "); then
         if [ -f /usr/bin/zsh ]; then
           message "Oh my zsh will want to replace bash. \nTo continue, \nyou must confirm & type exit."
-          if [ ! -d /home/$(whoami)/.ohmyzsh ]; then
+          if [ ! -d /home/$localuser/.ohmyzsh ]; then
             clear
             # for home user
             sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
             git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
             git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
           else
-            message "Oh my zsh is already installed for /home/$(whoami)."
+            message "Oh my zsh is already installed for /home/$localuser."
           fi
           # for root user
           if (confirm "Do you want to install also for root ? \n"); then
@@ -1574,27 +1581,20 @@ dotfilesmenu() {
       ;;
     "Copy fonts")
       if (confirm "Do you want to copy fonts ? \n "); then
-        if [ ! -d hypr-dot ]; then
-          clear
-          git clone https://github.com/drpars/hypr-dot.git
-        fi
-        message "/home/$(whoami)/.fonts will back up to $backupdir"
-        if [ ! -d /home/$(whoami)/.fonts ]; then
-          ln -sr $clonedir/.fonts /home/$(whoami)
+        ishyprdot
+        message "/home/$localuser/.fonts will back up to $backupdir"
+        if [ ! -d /home/$localuser/.fonts ]; then
+          ln -sr $clonedir/.fonts /home/$localuser
         else
-          mv /home/$(whoami)/.fonts $backupdir
-          ln -sr $clonedir/.fonts /home/$(whoami)
+          mv /home/$localuser/.fonts $backupdir
+          ln -sr $clonedir/.fonts /home/$localuser
         fi
       fi
       nextitem="Copy sddm themes"
       ;;
     "Copy sddm themes")
-      # message "You have to reboot system after sddm installation ! \nIf you want to succeed copying sddm theme !"
       if (confirm "Do you want to copy themes for sddm ?"); then
-        if [ ! -d hypr-dot ]; then
-          clear
-          git clone https://github.com/drpars/hypr-dot.git
-        fi
+        ishyprdot
         clear
         if [ -f /usr/bin/sddm ]; then
           sddm_conf_dir="/etc/sddm.conf.d"
@@ -1607,9 +1607,18 @@ dotfilesmenu() {
           sugar_candy_dir="/usr/share/sddm/themes/sugar-candy"
           if [ ! -d "$sugar_candy_dir" ]; then
             message "$sugar_candy_dir not found, creating...\n"
+            sudo mkdir -p $sugar_candy_dir
             sudo tar -xzvf $clonedir/sddm/sugar-candy/sugar-candy.tar.gz -C /usr/share/sddm/themes
             sudo cp $clonedir/sddm/sugar-candy/theme.conf $sugar_candy_dir
-            sudo cp $clonedir/sddm/sugar-candy/background.jpg $sugar_candy_dir/Backgrounds/
+          else
+            message "$sugar_candy_dir is exist found, Backed up to $backupdir/sddmbackup.\n"
+            if [ ! -d $backupdir/sddmbackup ]; then
+              mkdir -p $backupdir/sddmbackup
+            fi
+            sudo mv $sugar_candy_dir $backupdir/sddmbackup
+            sudo mkdir -p $sugar_candy_dir
+            sudo tar -xzvf $clonedir/sddm/sugar-candy/sugar-candy.tar.gz -C /usr/share/sddm/themes
+            sudo cp $clonedir/sddm/sugar-candy/theme.conf $sugar_candy_dir
           fi
           message "Sddm theme is successfully copied. "
         else
@@ -1628,10 +1637,7 @@ dotfilesmenu() {
       ;;
     "Copy Hyprland dotfiles")
       if (confirm "Do do you want to copy hyprland dotfiles ? \n "); then
-        if [ ! -d hypr-dot ]; then
-          clear
-          git clone https://github.com/drpars/hypr-dot.git
-        fi
+        ishyprdot
         clear
         mkdir -p $backupdir
         # for ~/.dotfiles/hypr-dot
@@ -1639,67 +1645,70 @@ dotfilesmenu() {
           if diff -r hypr-dot $clonedir; then
             message "$clonedir is up to date."
           else
-            # different files
+            # out of date
             if (confirm "Hyprland dotfiles are out of date. \nDo you want to backup existing hyprland dotfiles ? \n "); then
               mkdir -p $backupdir/old
               mv $clonedir $backupdir/old
-              cp -r hypr-dot /home/$(whoami)/.dotfiles/
+              cp -r hypr-dot /home/$localuser/.dotfiles/
               message "Existing files are backed up to $backupdir/old \nNew files are copied to $clonedir ."
             else
               rm -rf $clonedir
-              cp -r hypr-dot /home/$(whoami)/.dotfiles/
+              cp -r hypr-dot /home/$localuser/.dotfiles/
               message "New files are copied to $clonedir ."
             fi
           fi
         else
           mkdir -p $clonedir
-          cp -r hypr-dot /home/$(whoami)/.dotfiles/
+          cp -r hypr-dot /home/$localuser/.dotfiles/
           message "New files are copied to $clonedir ."
         fi
         # backup for ~/.config files
         for selconfig in $configfiles; do
-          if [ -d /home/$(whoami)/.config/$selconfig ]; then
-            mv /home/$(whoami)/.config/$selconfig $backupdir
-          elif [ -L /home/$(whoami)/.config/$selconfig ]; then
-            rm /home/$(whoami)/.config/$selconfig
+          if [ -d /home/$localuser/.config/$selconfig ]; then
+            mv /home/$localuser/.config/$selconfig $backupdir
+          elif [ -L /home/$localuser/.config/$selconfig ]; then
+            rm /home/$localuser/.config/$selconfig
           fi
         done
-        message "Dotfiles in /home/$(whoami)/.config are backed up to $backupdir . \n "
+        message "Dotfiles in /home/$localuser/.config are backed up to $backupdir . \n "
         # creating new dotfiles
-        ln -sr $clonedir/config/* /home/$(whoami)/.config
+        ln -sr $clonedir/config/* /home/$localuser/.config
         for selhomefiles in $homefiles; do
-          if [ ! -f /home/$(whoami)/$selhomefiles ]; then
-            ln -sr $clonedir/$selhomefiles /home/$(whoami)
+          if [ ! -f /home/$localuser/$selhomefiles ]; then
+            ln -sr $clonedir/$selhomefiles /home/$localuser
           else
-            mv /home/$(whoami)/$selhomefiles $backupdir
-            ln -sr $clonedir/$selhomefiles /home/$(whoami)
+            mv /home/$localuser/$selhomefiles $backupdir
+            ln -sr $clonedir/$selhomefiles /home/$localuser
           fi
         done
         if (pacman -Qs bat); then
           bat cache --build
         fi
-        if [ -f /root/.zshrc ]; then
-          sudo rm /root/.zshrc
-          sudo ln -sr $clonedir/.zshrc /root/.zshrc
-        fi
         if [ ! -d /usr/share/gnome-text-editor/styles ]; then
           mkdir -p /usr/share/gnome-text-editor/styles
+          sudo cp $clonedir/gnome-text-editor/tokyonight-dark.xml /usr/share/gnome-text-editor/styles/
+        else
           if [ ! -f /usr/share/gnome-text-editor/styles/tokyonight-dark.xml ]; then
             sudo cp $clonedir/gnome-text-editor/tokyonight-dark.xml /usr/share/gnome-text-editor/styles/
           fi
         fi
-        message "Updated hyprland dotfiles are added to /home/$(whoami)/.config folder. "
+        # for /root
+        if [ -f /root/.zshrc ]; then
+          sudo rm /root/.zshrc
+          sudo cp $clonedir/root/.zshrc /root
+        fi
+        message "Updated hyprland dotfiles are added to /home/$localuser/.config folder. "
       fi
       nextitem="Authorize Neovim dotfiles"
       ;;
     "Authorize Neovim dotfiles")
-      if (confirm "Do you want to authorize /home/$(whoami)/.config/nvim with github token key?"); then
+      if (confirm "Do you want to authorize /home/$localuser/.config/nvim with github token key?"); then
         username=$(dialog --backtitle "$apptitle" --title "Authorize nvim repo" --inputbox "Enter your github user name :" 0 0 3>&1 1>&2 2>&3)
         token=$(dialog --backtitle "$apptitle" --title "Authorize nvim repo" --inputbox "Enter your github token key :" 0 0 3>&1 1>&2 2>&3)
         clear
-        cd /home/$(whoami)/.config/nvim
+        cd /home/$localuser/.config/nvim
         git remote set-url origin https://$username:$token@github.com/$username/nvim.git
-        message "/home/$(whoami)/nvim is authorized."
+        message "/home/$localuser/nvim is authorized."
       fi
       nextitem="Authorize Hyprland dotfiles"
       ;;
@@ -1717,9 +1726,9 @@ dotfilesmenu() {
     "Remove neovim dotfiles")
       if (confirm "Do you want to remove nvim dotfiles ? \n "); then
         clear
-        rm -rf /home/$(whoami)/.config/nvim
-        rm -rf /home/$(whoami)/.local/share/nvim
-        rm -rf /home/$(whoami)/.cache/nvim
+        rm -rf /home/$localuser/.config/nvim
+        rm -rf /home/$localuser/.local/share/nvim
+        rm -rf /home/$localuser/.cache/nvim
         message "Nvim dotfiles are completely removed. \n "
       fi
       nextitem="Remove neovim dotfiles"
@@ -1774,12 +1783,13 @@ if [ ! $(id -u) = 0 ]; then
     cputype="intel"
   fi
   scriptdir=$(pwd)
+  localuser="$(whoami)"
   mainmenu
   rm -rf $scriptdir/hypr-dot
   rm $scriptdir/colors
   clear
 else
-  echo "The script does not run as root."
+  echo "The script does not run as root (or under root user)."
   exit 1
 fi
 
