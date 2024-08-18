@@ -132,7 +132,7 @@ serviceenable() {
   fi
 }
 
-servicserviceedisable() {
+servicedisable() {
   if [ "$2" = "" ]; then
     displayname="$1"
   else
@@ -511,14 +511,18 @@ asusdriver() {
   if ($isg14repo); then
     options=(
       "asusctl" "" on
+      "power-profiles-daemon" "" on
       "supergfxctl" "" on
+      "switcheroo-control" "" on
       "rog-control-center" "" on
       "brightnessctl" "" on
     )
   else
     options=(
       "asusctl" "(AUR)" on
+      "power-profiles-daemon" "(AUR)" on
       "supergfxctl" "(AUR)" on
+      "switcheroo-control" "(AUR)" on
       "rog-control-center" "(AUR)" on
       "brightnessctl" "" on
     )
@@ -542,6 +546,9 @@ asusdriver() {
       done
     fi
     instpkg "$pkg" "$aurpkg"
+    serviceenable power-profiles-daemon.service
+    serviceenable supergfxd
+    serviceenable switcheroo-control
   fi
 }
 
@@ -753,6 +760,7 @@ filesystemsapps() {
 
 systemapps() {
   options=(
+    "gnome-disk-utility" "" on
     "gparted" "(GTK) Partitions manager" off
     "acpi" "" on
     "acpi_call-dkms" "" on
@@ -980,18 +988,6 @@ themeengine() {
         esac
       done
       instpkg "$pkg" "$aurpkg"
-      # lightly-kf5
-      options=(
-        "lightly-kf5-git" "(AUR)" on
-      )
-      selkf5=$(dialog --backtitle "$apptitle" --title "lightly-kf5 :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-      for item in $selkf5; do
-        case $item in
-        "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-        esac
-      done
-      instpkg "$pkg" "$aurpkg"
     fi
     for item in $sel; do
       case $item in
@@ -1004,6 +1000,18 @@ themeengine() {
       esac
     done
     instpkg "$pkg" "$aurpkg"
+    # lightly-kf5
+    options=(
+      "lightly-kf5-git" "(AUR)" on
+    )
+    selkf5=$(dialog --backtitle "$apptitle" --title "lightly-kf5 :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+    for item in $selkf5; do
+      case $item in
+      "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      esac
+    done
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
@@ -1011,6 +1019,7 @@ gameapps() {
   options=(
     "steam" "" on
     "heroic-games-launcher-bin" "(AUR)" off
+    "suyu-bin" "(AUR)" off
   )
   sel=$(dialog --backtitle "$apptitle" --title "Game launchers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
@@ -1018,6 +1027,7 @@ gameapps() {
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "heroic-games-launcher-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "suyu-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
@@ -1084,9 +1094,7 @@ otherapps() {
         sudo groupadd libvirt
         sudo gpasswd -a drpars libvirt
         serviceenable libvirtd.service
-        # serviceenable libvirtd.socket
         serviceenable virtlogd.service
-        # serviceenable virtlockd.socket
       fi
     fi
     ;;
@@ -1224,6 +1232,7 @@ hyprland() {
     "pamixer" "" on
     "pavucontrol" "" on
     "iwgtk" "(AUR)" on
+    "dconf" "" on
   )
   sel=$(dialog --backtitle "$apptitle" --title "Hyprland :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
@@ -1444,7 +1453,7 @@ configmenu() {
           pressanykey
         fi
       else
-        message "aldsakljhdkahsdkj"
+        message "Nothing changed !"
       fi
       nextitem="Network settings"
       ;;
