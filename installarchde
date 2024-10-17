@@ -1050,6 +1050,9 @@ otherapps() {
       "dmidecode" "" on
       "qemu-desktop" "" on
       "virt-manager" "" on
+      "virt-viewer" "" on
+      "bridge-utils" "" on
+      "swtpm" "" on
     )
     sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
     if [ "$?" = 0 ]; then
@@ -1091,8 +1094,14 @@ otherapps() {
         fi
         # /etc/mkinitcpio.conf
         # MODULES=(virtio virtio_blk virtio_pci virtio_net)
-        sudo groupadd libvirt
-        sudo gpasswd -a drpars libvirt
+        # -------------------------------------------------
+        # sudo groupadd libvirt
+        # sudo groupadd kvm
+        # -------------------------------------------------
+        # Autostart Network
+        sudo virsh net-autostart default
+        sudo virsh net-start default
+        sudo usermod -a -G kvm,libvirt $localuser
         serviceenable libvirtd.service
         serviceenable virtlogd.service
       fi
@@ -1151,7 +1160,7 @@ themes() {
       clear
       git clone https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git
       instpkg "gtk-engine-murrine"
-      sh Tokyonight-GTK-Theme/themes/install.sh
+      sh Tokyonight-GTK-Theme/themes/install.sh -l
       rm -rf Tokyonight-GTK-Theme
       pressanykey
       nextitem="Mocu xcursor"
@@ -1232,6 +1241,7 @@ hyprland() {
     "pamixer" "" on
     "pavucontrol" "" on
     "iwgtk" "(AUR)" on
+    "blueberry" "" on
     "dconf" "" on
   )
   sel=$(dialog --backtitle "$apptitle" --title "Hyprland :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
