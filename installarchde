@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Exit on error
+# set -e
+
 apptitle="Arch Linux DE & Apps Installation"
 
 mainmenu() {
@@ -65,55 +68,76 @@ message() {
   dialog --backtitle "$apptitle" --msgbox "$1" 0 0
 }
 
+# Function to wait for user input
 pressanykey() {
-  read -n1 -p "Press any key to continue."
+  read -n1 -r -p "Press any key to continue..."
+  echo
 }
 
+# Function to install packages
 instpkg() {
-  if [ ! "$1" = "" ]; then
-    clear
-    echo "# sudo pacman -S --needed $1"
-    sudo pacman -S --needed $1
+  clear
+  # Declare pkg and aurpkg as global variables
+  pkg="$1"
+  aurpkg="$2"
+
+  if [[ -n "$pkg" ]]; then
+    echo "# sudo pacman -S --needed $pkg"
+    sudo pacman -S --needed $pkg
     pressanykey
   fi
-  if [ ! "$2" = "" ]; then
-    if [ -f /usr/bin/yay ]; then
-      clear
-      echo "# sudo -u $localuser yay -S --needed $2"
-      sudo -u $localuser yay -S --needed $2
-      pressanykey
+
+  if [[ -n "$aurpkg" ]]; then
+    local aurhelper
+    if command -v yay &>/dev/null; then
+      aurhelper="yay"
+    elif command -v paru &>/dev/null; then
+      aurhelper="paru"
     else
-      if [ -f /usr/bin/paru ]; then
-        clear
-        echo "# sudo -u $localuser paru -S --needed $2"
-        sudo -u $localuser paru -S --needed $2
-        pressanykey
-      else
-        echo "To install AUR packages, you need to install an aurhelper in Upadte menu !"
-      fi
+      echo "To install AUR packages, you need to install an AUR helper (yay or paru) in the Update menu!"
+      return 1
     fi
+
+    echo "# sudo -u $localuser $aurhelper -S --needed $aurpkg"
+    sudo -u $localuser $aurhelper -S --needed $aurpkg
+    pressanykey
   fi
+
+  # Reset variables after use
   resetvalue pkg aurpkg
 }
 
+# Function to choose packages interactively
 choosepkg() {
-  if [ "$2" = "" ]; then
-    title=$1
-  else
-    title=$2
-  fi
-  options=()
-  items=$(pacman -Ssq $1)
+  local search_term="$1"
+  local title="${2:-$1}"  # Use $1 as the title if $2 is not provided
+  local options=()
+  local items
+
+  # Get the list of packages matching the search term
+  items=$(pacman -Ssq "$search_term")
+
+  # Build the options array for dialog
   for item in $items; do
     options+=("$item" "" off)
   done
+
+  # Show the dialog menu
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "$title" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ ! "$?" = "0" ]; then
+
+  # Check if the user canceled the dialog
+  if [[ "$?" -ne 0 ]]; then
     return 1
   fi
+
+  # Process the selected packages
+  local pkg=""
   for itm in $sel; do
-    pkg="$pkg $(echo $itm | sed 's/"//g')"
+    pkg="$pkg $(echo "$itm" | sed 's/"//g')"
   done
+
+  # Install the selected packages
   instpkg "$pkg" "$aurpkg"
   return 0
 }
