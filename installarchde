@@ -53,11 +53,23 @@ resetvalue() {
 }
 
 cpumodel() {
-  cat /proc/cpuinfo | awk '/model name/' | uniq | grep -i "$1" >/dev/null
+  local query="$1"
+
+  if grep -qi "$query" /proc/cpuinfo; then
+    return 0 # Success (CPU matches)
+  else
+    return 1 # Failure (CPU does not match)
+  fi
 }
 
 gpumodel() {
-  lspci | grep -E "(VGA|3D)" | awk '/"$1"/' >/dev/null
+  local query="$1"
+  # Search in both VGA and 3D controller entries for better coverage
+  if lspci | grep -Ei "VGA|3D" | grep -qi "$query"; then
+    return 0 # GPU vendor found
+  else
+    return 1 # GPU vendor not found
+  fi
 }
 
 confirm() {
@@ -110,7 +122,7 @@ instpkg() {
 # Function to choose packages interactively
 choosepkg() {
   local search_term="$1"
-  local title="${2:-$1}"  # Use $1 as the title if $2 is not provided
+  local title="${2:-$1}" # Use $1 as the title if $2 is not provided
   local options=()
   local items
 
@@ -427,7 +439,7 @@ amddriver() {
       if (confirm "Do you want to apply necessary modules ? \n "); then
         clear
         amdmodule="amdgpu radeon"
-        if (gpumodel "amd"); then
+        if gpumodel "amd"; then
           gpumodule="$amdmodule"
         else
           gpumodule=""
@@ -478,9 +490,11 @@ nvidiadriver() {
     if (pacman -Qs nvidia); then
       if (confirm "Do you want to apply necessary modules ? \n "); then
         clear
+        local gpumodule=""
+        local gpukernel=""
         nvidiamodule="nvidia nvidia_modeset nvidia_uvm nvidia_drm"
         nvidiakernelmodule="modeset=1"
-        if (gpumodel "nvidia"); then
+        if gpumodel "nvidia"; then
           gpumodule="$nvidiamodule"
           gpukernel="$nvidiakernelmodule"
         else
@@ -984,54 +998,52 @@ themeengine() {
     "qt6ct" "" off
     "qt5ct-kde" "(AUR)" on
     "qt6ct-kde" "(AUR)" on
-    "lightly-kf6-git" "(AUR)" on
+    "darkly-qt5-git" "(AUR)" on
+    "darkly-qt6-git" "(AUR)" on
   )
   sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   if [ "$?" = 0 ]; then
-    if [[ "${sel}" == *"lightly-kf6-git"* ]]; then
+    if [[ "${sel}" == *"darkly"* ]]; then
       options=(
-        "frameworkintegration5" "" on
-        "hicolor-icon-theme" "" on
-        "kcmutils5" "" on
-        "kconfig5" "" on
-        "kcoreaddons5" "" on
-        "kdecoration5" "" on
-        "kguiaddons5" "" on
-        "ki18n5" "" on
-        "kiconthemes5" "" on
-        "kwayland5" "" on
-        "kwindowsystem5" "" on
+        "cmake" "" on
+        "extra-cmake-modules" "" on
+        "kdecoration" "" on
+        "qt6-declarative" "" on
+        "kcoreaddons" "" on
+        "kcmutils" "" on
+        "kcolorscheme" "" on
+        "kconfig" "" on
+        "kguiaddons" "" on
+        "kiconthemes" "" on
+        "kwindowsystem" "" on
+        "git" "" on
         "qt5-declarative" "" on
         "qt5-x11extras" "" on
+        "gcc" "" on
+        "make" "" on
+        "kcmutils5" "" on
+        "frameworkintegration5" "" on
+        "kconfigwidgets5" "" on
+        "kiconthemes5" "" on
+        "kirigami2" "" on
+        "kwindowsystem5" "" on
       )
-      selkf6=$(dialog --backtitle "$apptitle" --title "lightly-kf6 dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-      for item in $selkf6; do
+      seldarkly=$(dialog --backtitle "$apptitle" --title "darkly dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      for item in $seldarkly; do
         case $item in
-        # "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+        # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
         *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
         esac
       done
-      instpkg "$pkg" "$aurpkg"
+      instpkg "$pkg"
     fi
     for item in $sel; do
       case $item in
       # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qogir-icon-theme") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "lightly-kf6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
-    done
-    instpkg "$pkg" "$aurpkg"
-    # lightly-kf5
-    options=(
-      "lightly-kf5-git" "(AUR)" on
-    )
-    selkf5=$(dialog --backtitle "$apptitle" --title "lightly-kf5 :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-    for item in $selkf5; do
-      case $item in
-      "lightly-kf5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "darkly-qt5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
+      "darkly-qt6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
       *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
       esac
     done
@@ -1819,10 +1831,10 @@ if [ ! $(id -u) = 0 ]; then
     "check_selected_color = tag_selected_color" >colors
   export DIALOGRC="colors"
   EDITOR=nvim
-  if (cpumodel "amd"); then
+  if cpumodel "amd"; then
     cputype="amd"
   fi
-  if (cpumodel "intel"); then
+  if cpumodel "intel"; then
     cputype="intel"
   fi
   scriptdir=$(pwd)
