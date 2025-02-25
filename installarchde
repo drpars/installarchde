@@ -72,8 +72,10 @@ gpumodel() {
   fi
 }
 
+# Function to display a confirmation dialog
 confirm() {
   dialog --backtitle "$apptitle" --yesno "$1" 0 0
+  return $?
 }
 
 message() {
@@ -154,49 +156,47 @@ choosepkg() {
   return 0
 }
 
+# Function to enable a systemd service
 serviceenable() {
-  if [ "$2" = "" ]; then
-    displayname="$1"
-  else
-    displayname="$2 ($1)"
-  fi
-  if (confirm "Start $displayname service at boot ?\n\nsystemctl enable $1"); then
+  local service_name="$1"
+  local display_name="${2:-$1}" # Use $1 if $2 is not provided
+
+  if confirm "Start $display_name service at boot?\n\nsystemctl enable $service_name"; then
     clear
-    echo "sudo systemctl enable $1"
-    sudo systemctl enable $1
+    echo "sudo systemctl enable $service_name"
+    sudo systemctl enable "$service_name"
     pressanykey
   fi
 }
 
+# Function to disable a systemd service
 servicedisable() {
-  if [ "$2" = "" ]; then
-    displayname="$1"
-  else
-    displayname="$2 ($1)"
-  fi
-  if (confirm "Disable $displayname service at boot ?\n\nsystemctl disable $1"); then
+  local service_name="$1"
+  local display_name="${2:-$1}" # Use $1 if $2 is not provided
+
+  if confirm "Disable $display_name service at boot?\n\nsystemctl disable $service_name"; then
     clear
-    echo "systemctl disable $1"
-    sudo systemctl disable $1
+    echo "sudo systemctl disable $service_name"
+    sudo systemctl disable "$service_name"
     pressanykey
   fi
 }
 
+# Function to clone the hypr-dot repository if it doesn't exist
 ishyprdot() {
-  if [ ! -d hypr-dot ]; then
+  if [[ ! -d hypr-dot ]]; then
     clear
+    echo "Cloning hypr-dot repository..."
     git clone https://github.com/drpars/hypr-dot.git
+  else
+    echo "hypr-dot repository already exists."
   fi
 }
 
+# Function to display the updates menu
 updatemenu() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local options=(
     "Install yay" ""
     "Install paru" ""
     "" ""
@@ -211,17 +211,22 @@ updatemenu() {
     "Refresh pacman keys" "pacman-key --refresh-keys"
     "" ""
   )
-  if [ -f /var/lib/pacman/db.lck ]; then
+  # Add "Remove db.lck" option if the lock file exists
+  if [[ -f /var/lib/pacman/db.lck ]]; then
     options+=(
       "Remove db.lck" "rm /var/lib/pacman/db.lck"
       "" ""
     )
   fi
+
+  # Display the menu
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Updates Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     case ${sel} in
     "Install yay")
-      if (confirm "Do you want to install yay ? \n "); then
+      if confirm "Do you want to install yay?\n"; then
         clear
         git clone https://aur.archlinux.org/yay-bin.git
         cd yay-bin || return
@@ -233,8 +238,7 @@ updatemenu() {
       nextitem="Install paru"
       ;;
     "Install paru")
-      if (confirm "Do you want to install paru ? \n "); then
-        # Paru
+      if confirm "Do you want to install paru?\n"; then
         clear
         git clone https://aur.archlinux.org/paru.git
         cd paru || return
@@ -285,18 +289,16 @@ updatemenu() {
       nextitem="Remove db.lck"
       ;;
     esac
+
+    # Recursively call updatemenu with the next item
     updatemenu "${nextitem}"
   fi
 }
 
+# Function to display the updates menu
 installmenu() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local options=(
     "Drivers" ""
     "Applications" ""
     "Fonts" ""
@@ -304,8 +306,12 @@ installmenu() {
     "Desktop Environment" ""
     "Display Manager" ""
   )
+
+  # Display the menu
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Install Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     case ${sel} in
     "Drivers")
       driversmenu
@@ -332,18 +338,16 @@ installmenu() {
       nextitem="Display Manager"
       ;;
     esac
+
+    # Recursively call updatemenu with the next item
     installmenu "${nextitem}"
   fi
 }
 
+# Function to display the drivers menu
 driversmenu() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local options=(
     "Amd" ""
     "Nvidia" ""
     "Nvidia VA-API" "nvidia-vaapi-driver"
@@ -351,8 +355,11 @@ driversmenu() {
     "Sound" ""
     "Mkinitcpio firmware" "(AUR)"
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Drivers :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     case ${sel} in
     "Amd")
       amddriver
@@ -363,7 +370,7 @@ driversmenu() {
       nextitem="Nvidia VA-API"
       ;;
     "Nvidia VA-API")
-      options=(
+      local options=(
         "meson" "" on
         "gst-plugins-bad" "" on
         "ffnvcodec-headers" "" on
@@ -371,18 +378,19 @@ driversmenu() {
 
       sel=$(dialog --backtitle "$apptitle" --title "NVIDIA VA-API dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
-      if [ "$?" = 0 ]; then
+      if [[ "$?" -eq 0 ]]; then
+        local pkg=""
         for item in $sel; do
-          case $item in
-          # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-          *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-          esac
+          # aurpkg="$aurpkg $(echo $item | sed 's/"//g')"
+          pkg="$pkg $(echo $item | sed 's/"//g')"
         done
+
         instpkg "$pkg" "$aurpkg"
-        if (pacman -Qs ffnvcodec-headers); then
+
+        if pacman -Qs ffnvcodec-headers &>/dev/null; then
           clear
           git clone https://github.com/elFarto/nvidia-vaapi-driver.git
-          cd nvidia-vaapi-driver
+          cd nvidia-vaapi-driver || return
           meson setup build
           meson install -C build
           cd ..
@@ -410,12 +418,14 @@ driversmenu() {
       nextitem="Mkinitcpio firmware"
       ;;
     esac
+
+    # Recursively call driversmenu with the next item
     driversmenu "${nextitem}"
   fi
 }
 
 amddriver() {
-  options=(
+  local options=(
     "mesa" "" on
     "lib32-mesa" "" on
     "xf86-video-amdgpu" "" on
@@ -426,17 +436,20 @@ amddriver() {
     "mesa-vdpau" "" on
     "lib32-mesa-vdpau" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Amd :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      # aurpkg="$aurpkg $(echo $item | sed 's/"//g')"
+      pkg="$pkg $(echo $item | sed 's/"//g')"
     done
+
     instpkg "$pkg" "$aurpkg"
-    if (pacman -Qs mesa); then
-      if (confirm "Do you want to apply necessary modules ? \n "); then
+
+    if pacman -Qs mesa &>/dev/null; then
+      if confirm "Do you want to apply necessary modules ? \n "; then
         clear
         amdmodule="amdgpu radeon"
         if gpumodel "amd"; then
@@ -444,6 +457,7 @@ amddriver() {
         else
           gpumodule=""
         fi
+
         # /etc/mkinitcpio.conf
         presentmkinitcpiomodules=$(cat /etc/mkinitcpio.conf | grep 'MODULES' | awk -F\) '{print $1}' | tr -d 'MODULES=(')
         if [[ $presentmkinitcpiomodules = "" ]]; then
@@ -466,7 +480,7 @@ amddriver() {
 }
 
 nvidiadriver() {
-  options=(
+  local options=(
     "nvidia" "" off
     "nvidia-lts" "" off
     "nvidia-dkms" "" on
@@ -478,67 +492,68 @@ nvidiadriver() {
     "egl-wayland" "" on
     "libva-nvidia-driver" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Nvidia :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      pkg="$pkg $(echo $item | sed 's/"//g')"
     done
+
     instpkg "$pkg" "$aurpkg"
-    if (pacman -Qs nvidia); then
-      if (confirm "Do you want to apply necessary modules ? \n "); then
+
+    if pacman -Qs nvidia &>/dev/null; then
+      if confirm "Do you want to apply necessary modules ? \n "; then
         clear
-        local gpumodule=""
-        local gpukernel=""
-        nvidiamodule="nvidia nvidia_modeset nvidia_uvm nvidia_drm"
-        nvidiakernelmodule="modeset=1"
-        if gpumodel "nvidia"; then
-          gpumodule="$nvidiamodule"
-          gpukernel="$nvidiakernelmodule"
-        else
-          gpumodule=""
-          gpukernel=""
-        fi
-        # /etc/mkinitcpio.conf - MODULES
-        presentmkinitcpiomodules=$(cat /etc/mkinitcpio.conf | grep 'MODULES' | awk -F\) '{print $1}' | tr -d 'MODULES=(')
-        if [[ $presentmkinitcpiomodules = "" ]]; then
-          sudo sed -i "s/MODULES=()/MODULES=(${gpumodule})/g" /etc/mkinitcpio.conf
-          sudo mkinitcpio -P
-        else
-          if (echo $presentmkinitcpiomodules | grep "$gpumodule" >/dev/null); then
-            clear
-            echo "$gpumodule -  Related modules already exist..."
-            pressanykey
-          else
-            newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
-            sudo sed -i "s/MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/g" /etc/mkinitcpio.conf
-            sudo mkinitcpio -P
-          fi
-        fi
-        # /etc/modprobe.d/nvidia.conf
-        clear
-        if [[ ! -f /etc/modprobe.d/nvidia.conf ]]; then
-          echo "options nvidia_drm modeset=1 fbdev=1" | sudo tee /etc/modprobe.d/nvidia.conf >/dev/null
-          sudo mkinitcpio -P
-          pressanykey
-        fi
-        # kernel mod - /etc/kernel/cmdline
-        presentkernelcmdline=$(cat /etc/kernel/cmdline)
-        if [ -f /etc/kernel/cmdline ]; then
-          if [[ $presentkernelcmdline != "" ]]; then
-            if (echo $presentkernelcmdline | grep "$gpukernel" >/dev/null); then
-              clear
-              echo "$gpukernel -  Related modules already exist..."
-              pressanykey
-            else
-              newkernelcmdline="${presentkernelcmdline} ${gpukernel}"
-              echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
-              sudo mkinitcpio -P
-            fi
-          fi
-        fi
+        configure_nvidia_modules
+      fi
+    fi
+  fi
+}
+
+configure_nvidia_modules() {
+  local gpumodule="nvidia nvidia_modeset nvidia_uvm nvidia_drm"
+  local gpukernel="modeset=1"
+
+  # Update /etc/mkinitcpio.conf
+  local presentmkinitcpiomodules
+  presentmkinitcpiomodules=$(grep '^MODULES=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
+
+  if [[ -z "$presentmkinitcpiomodules" ]]; then
+    sudo sed -i "s/^MODULES=()/MODULES=(${gpumodule})/" /etc/mkinitcpio.conf
+  elif ! echo "$presentmkinitcpiomodules" | grep -q "$gpumodule"; then
+    local newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
+    sudo sed -i "s/^MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/" /etc/mkinitcpio.conf
+  else
+    echo "$gpumodule - Related modules already exist..."
+    pressanykey
+  fi
+
+  # Regenerate initramfs
+  sudo mkinitcpio -P
+
+  # Create /etc/modprobe.d/nvidia.conf if it doesn't exist
+  if [[ ! -f /etc/modprobe.d/nvidia.conf ]]; then
+    echo "options nvidia_drm modeset=1 fbdev=1" | sudo tee /etc/modprobe.d/nvidia.conf >/dev/null
+    sudo mkinitcpio -P
+    pressanykey
+  fi
+
+  # Update /etc/kernel/cmdline
+  if [[ -f /etc/kernel/cmdline ]]; then
+    local presentkernelcmdline
+    presentkernelcmdline=$(cat /etc/kernel/cmdline)
+
+    if [[ -n "$presentkernelcmdline" ]]; then
+      if ! echo "$presentkernelcmdline" | grep -q "$gpukernel"; then
+        local newkernelcmdline="${presentkernelcmdline} ${gpukernel}"
+        echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
+        sudo mkinitcpio -P
+      else
+        echo "$gpukernel - Related modules already exist..."
+        pressanykey
       fi
     fi
   fi
