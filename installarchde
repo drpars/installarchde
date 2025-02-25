@@ -5,23 +5,20 @@
 
 apptitle="Arch Linux DE & Apps Installation"
 
+# Display the main menu
 mainmenu() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local options=(
     "Update" ""
     "Install" ""
     "Config" ""
     "Shutdown" ""
   )
 
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Main Menu" --default-item "${nextitem}" --cancel-button "Exit" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
-  if [ "$?" = "0" ]; then
+  if [[ "$?" -eq "0" ]]; then
     case ${sel} in
     "Update")
       updatemenu
@@ -40,9 +37,9 @@ mainmenu() {
       nextitem="Shutdown"
       ;;
     esac
+
+    # Recursively call mainmenu with the next item
     mainmenu "${nextitem}"
-  else
-    clear
   fi
 }
 
@@ -72,14 +69,23 @@ gpumodel() {
   fi
 }
 
-# Function to display a confirmation dialog
 confirm() {
-  dialog --backtitle "$apptitle" --yesno "$1" 0 0
+  local prompt="$1"
+  local title="${2:-Confirmation}" # Default title is "Confirmation"
+  local height="${3:-0}"           # Default height
+  local width="${4:-0}"            # Default width
+
+  dialog --backtitle "$apptitle" --title "$title" --yesno "$prompt" "$height" "$width"
   return $?
 }
 
 message() {
-  dialog --backtitle "$apptitle" --msgbox "$1" 0 0
+  local text="$1"
+  local title="${2:-Message}" # Default title is "Message"
+  local height="${3:-0}"      # Default height
+  local width="${4:-0}"       # Default width
+
+  dialog --backtitle "$apptitle" --title "$title" --msgbox "$text" "$height" "$width"
 }
 
 # Function to wait for user input
@@ -379,10 +385,11 @@ driversmenu() {
       sel=$(dialog --backtitle "$apptitle" --title "NVIDIA VA-API dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
       if [[ "$?" -eq 0 ]]; then
-        local pkg=""
+        local pkg="" aurpkg=""
         for item in $sel; do
-          # aurpkg="$aurpkg $(echo $item | sed 's/"//g')"
-          pkg="$pkg $(echo $item | sed 's/"//g')"
+          item=$(echo "$item" | tr -d '"')
+          # aurpkg="$aurpkg $item"
+          pkg="$pkg $item"
         done
 
         instpkg "$pkg" "$aurpkg"
@@ -441,9 +448,11 @@ amddriver() {
   sel=$(dialog --backtitle "$apptitle" --title "Amd :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      # aurpkg="$aurpkg $(echo $item | sed 's/"//g')"
-      pkg="$pkg $(echo $item | sed 's/"//g')"
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
 
     instpkg "$pkg" "$aurpkg"
@@ -451,32 +460,31 @@ amddriver() {
     if pacman -Qs mesa &>/dev/null; then
       if confirm "Do you want to apply necessary modules ? \n "; then
         clear
-        amdmodule="amdgpu radeon"
-        if gpumodel "amd"; then
-          gpumodule="$amdmodule"
-        else
-          gpumodule=""
-        fi
-
-        # /etc/mkinitcpio.conf
-        presentmkinitcpiomodules=$(cat /etc/mkinitcpio.conf | grep 'MODULES' | awk -F\) '{print $1}' | tr -d 'MODULES=(')
-        if [[ $presentmkinitcpiomodules = "" ]]; then
-          sudo sed -i "s/MODULES=()/MODULES=(${gpumodule})/g" /etc/mkinitcpio.conf
-          sudo mkinitcpio -P
-        else
-          if (echo $presentmkinitcpiomodules | grep "$gpumodule" >/dev/null); then
-            clear
-            echo "$gpumodule -  Related modules already exist..."
-            pressanykey
-          else
-            newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
-            sudo sed -i "s/MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/g" /etc/mkinitcpio.conf
-            sudo mkinitcpio -P
-          fi
-        fi
+        configure_amd_modules
       fi
     fi
   fi
+}
+
+configure_amd_modules() {
+  local gpumodule="amdgpu radeon"
+
+  # Update /etc/mkinitcpio.conf
+  local presentmkinitcpiomodules
+  presentmkinitcpiomodules=$(grep '^MODULES=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
+
+  if [[ -z $presentmkinitcpiomodules ]]; then
+    sudo sed -i "s/MODULES=()/MODULES=(${gpumodule})/" /etc/mkinitcpio.conf
+  elif ! echo $presentmkinitcpiomodules | grep -q "$gpumodule"; then
+    local newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
+    sudo sed -i "s/MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/" /etc/mkinitcpio.conf
+  else
+    echo "$gpumodule -  Related modules are already exist..."
+    pressanykey
+  fi
+
+  # Regenerate initramfs
+  sudo mkinitcpio -P
 }
 
 nvidiadriver() {
@@ -497,9 +505,11 @@ nvidiadriver() {
   sel=$(dialog --backtitle "$apptitle" --title "Nvidia :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
-    local pkg=""
+    local pkg="" aurpkg=""
     for item in $sel; do
-      pkg="$pkg $(echo $item | sed 's/"//g')"
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
 
     instpkg "$pkg" "$aurpkg"
@@ -560,8 +570,13 @@ configure_nvidia_modules() {
 }
 
 asusdriver() {
-  isg14repo=$(cat /etc/pacman.conf | grep -i "[g14]" >/dev/null)
-  if ($isg14repo); then
+  # Check if the [g14] repository is enabled in pacman.conf
+  local isg14repo
+  isg14repo=$(grep -i "^\[g14\]" /etc/pacman.conf >/dev/null && echo true || echo false)
+
+  # Define package options based on the repository status
+  local options
+  if $isg14repo; then
     options=(
       "asusctl" "" on
       "power-profiles-daemon" "" on
@@ -580,33 +595,45 @@ asusdriver() {
       "brightnessctl" "" on
     )
   fi
+
+  # Display the menu and get user selections
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Asus :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
-    if ($isg14repo); then
-      for item in $sel; do
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg=""
+    local aurpkg=""
+
+    # Process selected items
+    for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
+      if $isg14repo; then
+        # aurpkg="$aurpkg $item"
+        pkg="$pkg $item"
+      else
         case $item in
-        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        "asusctl" | "supergfxctl" | "rog-control-center")
+          aurpkg="$aurpkg $item"
+          ;;
+        *)
+          pkg="$pkg $item"
+          ;;
         esac
-      done
-    else
-      for item in $sel; do
-        case $item in
-        "asusctl") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        "supergfxctl") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        "rog-control-center") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-        esac
-      done
-    fi
+      fi
+    done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
-    serviceenable power-profiles-daemon.service
+
+    # Enable necessary services
+    serviceenable power-profiles-daemon
     serviceenable supergfxd
     serviceenable switcheroo-control
   fi
 }
 
 sounddriver() {
-  options=(
+  local options=(
     "wireplumber" "" on
     "pipewire" "" on
     "pipewire-alsa" "" on
@@ -617,26 +644,27 @@ sounddriver() {
     "pipewire-x11-bell" "" off
     "easyeffects" "" off
   )
+
+  # Display the menu and get user selections
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Sound :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 appmenu() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}"
+  local options=(
     "Console" ""
     "Compression tools" ""
     "Programming" ""
@@ -650,8 +678,12 @@ appmenu() {
     "Games" ""
     "Other" ""
   )
+
+  # Display the application menu
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Applications :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     case ${sel} in
     "Console")
       consoleapps
@@ -702,12 +734,14 @@ appmenu() {
       nextitem="Other"
       ;;
     esac
+
+    # Recursively call appmenu with the next item
     appmenu "${nextitem}"
   fi
 }
 
 consoleapps() {
-  options=(
+  local options=(
     "cmatrix" "" off
     "fastfetch" "" on
     "mpv" "" on
@@ -725,20 +759,25 @@ consoleapps() {
     "zsh" "" on
     "zsh-completions" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Console applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 compressionapps() {
-  options=(
+  local options=(
     "tar" "" off
     "zip" "" off
     "unzip" "" off
@@ -746,20 +785,25 @@ compressionapps() {
     "p7zip" "" off
     "lzop" "" off
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Compression tools :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 programmingapps() {
-  options=(
+  local options=(
     # Python
     "python" "" on
     "python-pip" "" on
@@ -779,40 +823,50 @@ programmingapps() {
     "jq" "" on
     "cpanminus" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Programming language :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 filesystemsapps() {
-  options=(
+  local options=(
     "gvfs" "" on
     "gvfs-mtp" "" on
     "gvfs-smb" "" on
     "gvfs-nfs" "" on
     "gvfs-afc" "" off
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "File systems :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 systemapps() {
-  options=(
+  local options=(
     "gnome-disk-utility" "" on
     "gparted" "(GTK) Partitions manager" off
     "acpi" "" on
@@ -821,20 +875,25 @@ systemapps() {
     "lib32-lm_sensors" "" on
     "os-prober" "Detect OS for multi-boot (grub)" off
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "System applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 internetapps() {
-  options=(
+  local options=(
     "firefox" "" on
     "thunderbird" "" on
     "wget" "" off
@@ -842,16 +901,24 @@ internetapps() {
     "transmission-gtk" "" off
     "transmission-qt" "" off
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Internet applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" = 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
-      case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-      esac
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
+
+    # Install additionally packages
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
       "firefox") choosepkg "firefox-i18n-" ;;
       "thunderbird") choosepkg "thunderbird-i18n-" ;;
@@ -861,7 +928,7 @@ internetapps() {
 }
 
 commonapps() {
-  options=(
+  local options=(
     "libreoffice-fresh" "" off
     "libreoffice-still" "" off
     "waydroid" "(AUR)" on
@@ -873,63 +940,91 @@ commonapps() {
     "isomaster" "(AUR)" off
     "startup-settings-git" "(AUR)" off
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Common applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
+
+    # Process selected items
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "waydroid") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "webapp-manager") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "stacer-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "isomaster") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "startup-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      "waydroid" | "webapp-manager" | "stacer-bin" | "isomaster" | "startup-settings-git")
+        aurpkg="$aurpkg $item"
+        ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
+
+    # Install selected packages
     instpkg "$pkg" "$aurpkg"
+
+    # Install LibreOffice components
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
       "libreoffice-fresh") choosepkg "libreoffice-fresh-" ;;
       "libreoffice-still") choosepkg "libreoffice-still-" ;;
       esac
     done
-    if (! pacman -Qs linux-zen); then
-      if [[ "${sel}" == *"waydroid"* ]]; then
-        if (confirm "Waydroid in work perfectly with linux-zen kernel. \nOr maybe run with binder_linux-dkms \nDo you want to install binder_linux-dkms for waydroid ? \n "); then
-          options=(
-            "binder_linux-dkms" "(AUR)" on
-            "python-pyclip" "(AUR)" on
-            "waydroid-settings-git" "(AUR)" on
-          )
-          sel=$(dialog --backtitle "$apptitle" --title "Waydroid dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-          for item in $sel; do
-            case $item in
-            "binder_linux-dkms") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-            "python-pyclip") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-            "waydroid-settings-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-            *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
-            esac
-          done
-          instpkg "$pkg" "$aurpkg"
-          presentkernelcmdline=$(cat /etc/kernel/cmdline)
-          if (echo $presentkernelcmdline | grep "binder"); then
-            clear
-            echo "binder-linux kernel modules are already exist."
-            pressanykey
-          else
-            newkernelcmdline="${presentkernelcmdline} device=binder,hwbinder,vndbinder"
-            echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
-            sudo mkinitcpio -P
-            serviceenable waydroid-container.service
-            message "Waydroid is successfully installed. \nPlease rebbot before run!"
-          fi
+
+    # Handle Waydroid dependencies
+    if [[ "${sel}" == *"waydroid"* ]]; then
+      if ! pacman -Qs linux-zen &>/dev/null; then
+        if (confirm "Waydroid works best with linux-zen kernel.\nInstall binder_linux-dkms instead?\n"); then
+          configure_waydroid_settings
         fi
       fi
     fi
   fi
 }
 
+configure_waydroid_settings() {
+  local options=(
+    "binder_linux-dkms" "(AUR)" on
+    "python-pyclip" "(AUR)" on
+    "waydroid-settings-git" "(AUR)" on
+  )
+
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "Waydroid dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
+
+    for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
+      case $item in
+      "binder_linux-dkms" | "python-pyclip" | "waydroid-settings-git")
+        aurpkg="$aurpkg $item"
+        ;;
+      *) pkg="$pkg $item" ;;
+      esac
+    done
+
+    # Install selected packages
+    instpkg "$pkg" "$aurpkg"
+
+    # Update kernel cmdline
+    local presentkernelcmdline
+    presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
+
+    if ! grep -q "binder" <<<"$presentkernelcmdline"; then
+      local newkernelcmdline="${presentkernelcmdline} device=binder,hwbinder,vndbinder"
+      echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
+      sudo mkinitcpio -P
+      serviceenable waydroid-container
+      message "Waydroid installed successfully.\nReboot before running!"
+    else
+      message "Binder modules already exist in kernel cmdline."
+    fi
+  fi
+}
+
 filebrowsersapps() {
+  local options
   options=(
     "dolphin" "KDE" on
     "dolphin-plugins" "KDE" on
@@ -945,16 +1040,23 @@ filebrowsersapps() {
     "tumbler" "" on
     "yazi" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "File browsers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "thunar-shares-plugin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      "thunar-shares-plugin") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
+
     if [[ "${sel}" == *"yazi"* ]]; then
       options=(
         "ffmpegthumbnailer" "" on
@@ -967,20 +1069,24 @@ filebrowsersapps() {
         "zoxide" "" on
         "imagemagick" "" on
       )
+
       sel=$(dialog --backtitle "$apptitle" --title "Yazi dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
       for item in $sel; do
+        item=$(echo "$item" | tr -d '"')
         case $item in
-        # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        # "") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
         esac
       done
+
       instpkg "$pkg" "$aurpkg"
     fi
   fi
 }
 
 multimediaapps() {
-  options=(
+  local options=(
     "smplayer" "" off
     "smplayer-skins" "" off
     "smplayer-themes" "" off
@@ -993,19 +1099,25 @@ multimediaapps() {
     "gst-libav" "" on
     "libde265" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Multimedia firmware & apps :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 themeengine() {
+  local options
   options=(
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
@@ -1016,8 +1128,12 @@ themeengine() {
     "darkly-qt5-git" "(AUR)" on
     "darkly-qt6-git" "(AUR)" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     if [[ "${sel}" == *"darkly"* ]]; then
       options=(
         "cmake" "" on
@@ -1046,20 +1162,20 @@ themeengine() {
       seldarkly=$(dialog --backtitle "$apptitle" --title "darkly dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
       for item in $seldarkly; do
         case $item in
-        # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        # "") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
         esac
       done
       instpkg "$pkg"
     fi
     for item in $sel; do
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt5ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "qt6ct-kde") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "darkly-qt5-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "darkly-qt6-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      "qt5ct-kde") aurpkg="$aurpkg $item" ;;
+      "qt6ct-kde") aurpkg="$aurpkg $item" ;;
+      "darkly-qt5-git") aurpkg="$aurpkg $item" ;;
+      "darkly-qt6-git") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
@@ -1076,10 +1192,10 @@ gameapps() {
   if [ "$?" = 0 ]; then
     for item in $sel; do
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "heroic-games-launcher-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "suyu-bin") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      "heroic-games-launcher-bin") aurpkg="$aurpkg $item" ;;
+      "suyu-bin") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
@@ -1109,8 +1225,8 @@ otherapps() {
     if [ "$?" = 0 ]; then
       for item in $sel; do
         case $item in
-        # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-        *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+        # "") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
         esac
       done
       instpkg "$pkg" "$aurpkg"
@@ -1175,8 +1291,8 @@ fonts() {
   if [ "$?" = 0 ]; then
     for item in $sel; do
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
@@ -1299,14 +1415,14 @@ hyprland() {
   if [ "$?" = 0 ]; then
     for item in $sel; do
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "hyprpicker") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "waybar-updates") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "wlogout") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "wlogout-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "swww") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "iwgtk") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      "hyprpicker") aurpkg="$aurpkg $item" ;;
+      "waybar-updates") aurpkg="$aurpkg $item" ;;
+      "wlogout") aurpkg="$aurpkg $item" ;;
+      "wlogout-git") aurpkg="$aurpkg $item" ;;
+      "swww") aurpkg="$aurpkg $item" ;;
+      "iwgtk") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
@@ -1354,12 +1470,12 @@ plasma() {
   if [ "$?" = 0 ]; then
     for item in $sel; do
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "latte-dock-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "plasma5-applets-virtual-desktop-bar-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "plasma5-applets-window-appmenu-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      "sddm-conf-git") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      "latte-dock-git") aurpkg="$aurpkg $item" ;;
+      "plasma5-applets-virtual-desktop-bar-git") aurpkg="$aurpkg $item" ;;
+      "plasma5-applets-window-appmenu-git") aurpkg="$aurpkg $item" ;;
+      "sddm-conf-git") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
@@ -1418,8 +1534,8 @@ gnome() {
   if [ "$?" = 0 ]; then
     for item in $sel; do
       case $item in
-      # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-      *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+      # "") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
@@ -1527,8 +1643,8 @@ configmenu() {
       if [ "$?" = "0" ]; then
         for item in $sel; do
           case $item in
-          # "") aurpkg="$aurpkg $(echo $item | sed 's/"//g')" ;;
-          *) pkg="$pkg $(echo $item | sed 's/"//g')" ;;
+          # "") aurpkg="$aurpkg $item" ;;
+          *) pkg="$pkg $item" ;;
           esac
         done
         instpkg "$pkg" "$aurpkg"
