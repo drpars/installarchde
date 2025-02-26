@@ -1117,8 +1117,7 @@ multimediaapps() {
 }
 
 themeengine() {
-  local options
-  options=(
+  local options=(
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
@@ -1134,151 +1133,207 @@ themeengine() {
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
+
     if [[ "${sel}" == *"darkly"* ]]; then
-      options=(
-        "cmake" "" on
-        "extra-cmake-modules" "" on
-        "kdecoration" "" on
-        "qt6-declarative" "" on
-        "kcoreaddons" "" on
-        "kcmutils" "" on
-        "kcolorscheme" "" on
-        "kconfig" "" on
-        "kguiaddons" "" on
-        "kiconthemes" "" on
-        "kwindowsystem" "" on
-        "git" "" on
-        "qt5-declarative" "" on
-        "qt5-x11extras" "" on
-        "gcc" "" on
-        "make" "" on
-        "kcmutils5" "" on
-        "frameworkintegration5" "" on
-        "kconfigwidgets5" "" on
-        "kiconthemes5" "" on
-        "kirigami2" "" on
-        "kwindowsystem5" "" on
-      )
-      seldarkly=$(dialog --backtitle "$apptitle" --title "darkly dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-      for item in $seldarkly; do
-        case $item in
-        # "") aurpkg="$aurpkg $item" ;;
-        *) pkg="$pkg $item" ;;
-        esac
-      done
-      instpkg "$pkg"
+      darkly_theme_dependencies
     fi
+
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      "qt5ct-kde") aurpkg="$aurpkg $item" ;;
-      "qt6ct-kde") aurpkg="$aurpkg $item" ;;
-      "darkly-qt5-git") aurpkg="$aurpkg $item" ;;
-      "darkly-qt6-git") aurpkg="$aurpkg $item" ;;
+      "qt5ct-kde" | "qt6ct-kde" | "darkly-qt5-git" | "darkly-qt6-git")
+        aurpkg="$aurpkg $item"
+        ;;
       *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
+darkly_theme_dependencies() {
+  local options=(
+    "cmake" "" on
+    "extra-cmake-modules" "" on
+    "kdecoration" "" on
+    "qt6-declarative" "" on
+    "kcoreaddons" "" on
+    "kcmutils" "" on
+    "kcolorscheme" "" on
+    "kconfig" "" on
+    "kguiaddons" "" on
+    "kiconthemes" "" on
+    "kwindowsystem" "" on
+    "git" "" on
+    "qt5-declarative" "" on
+    "qt5-x11extras" "" on
+    "gcc" "" on
+    "make" "" on
+    "kcmutils5" "" on
+    "frameworkintegration5" "" on
+    "kconfigwidgets5" "" on
+    "kiconthemes5" "" on
+    "kirigami2" "" on
+    "kwindowsystem5" "" on
+  )
+
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "darkly dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [[ "$?" -eq 0 ]]; then
+    locak pkg="" aurpkg=""
+    for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
+      case $item in
+      # "") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
+      esac
+    done
+
+    instpkg "$pkg" "aurpkg"
+  fi
+}
+
 gameapps() {
-  options=(
+  local options=(
     "steam" "" on
     "heroic-games-launcher-bin" "(AUR)" off
     "suyu-bin" "(AUR)" off
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Game launchers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      "heroic-games-launcher-bin") aurpkg="$aurpkg $item" ;;
-      "suyu-bin") aurpkg="$aurpkg $item" ;;
+      "heroic-games-launcher-bin" | "suyu-bin")
+        aurpkg="$aurpkg $item"
+        ;;
       *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 otherapps() {
-  options=(
+  local options=(
     "Virt Manager" ""
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Other applications :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   case $sel in
   "Virt Manager")
-    options=(
-      "libvirt" "" on
-      "iptables-nft" "" on
-      "dnsmasq" "" on
-      "openbsd-netcat" "" on
-      "dmidecode" "" on
-      "qemu-desktop" "" on
-      "virt-manager" "" on
-      "virt-viewer" "" on
-      "bridge-utils" "" on
-      "swtpm" "" on
-    )
-    sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-    if [ "$?" = 0 ]; then
-      for item in $sel; do
-        case $item in
-        # "") aurpkg="$aurpkg $item" ;;
-        *) pkg="$pkg $item" ;;
-        esac
-      done
-      instpkg "$pkg" "$aurpkg"
-      if (pacman -Qs libvirt >/dev/null); then
-
-        if (cat /etc/libvirt/libvirtd.conf | grep "unix_sock_group = 'libvirt'") >/dev/null; then
-          echo "/etc/libvirt/libvirtd.conf is already modified..."
-          pressanykey
-        else
-          printf "%s\n" \
-            "" \
-            "unix_sock_group = 'libvirt'" \
-            "unix_sock_rw_perms = '0770'" | sudo tee -a /etc/libvirt/libvirtd.conf >/dev/null
-        fi
-        if (cat /etc/libvirt/qemu.conf | grep "$localuser") >/dev/null; then
-          echo "/etc/libvirt/qemu.conf is already modified..."
-          pressanykey
-        else
-          printf "%s\n" \
-            "" \
-            "# User Settings" \
-            "user = \"$localuser\"" \
-            "group = \"$localuser\"" | sudo tee -a /etc/libvirt/qemu.conf >/dev/null
-        fi
-        if (cat /etc/libvirt/network.conf | grep "firewall_backend=\"iptables\"") >/dev/null; then
-          echo "/etc/libvirt/network.conf is already modified..."
-          pressanykey
-        else
-          printf "%s\n" \
-            "" \
-            "firewall_backend=\"iptables\"" | sudo tee -a /etc/libvirt/network.conf >/dev/null
-        fi
-        # /etc/mkinitcpio.conf
-        # MODULES=(virtio virtio_blk virtio_pci virtio_net)
-        # -------------------------------------------------
-        # sudo groupadd libvirt
-        # sudo groupadd kvm
-        # -------------------------------------------------
-        # Autostart Network
-        sudo virsh net-autostart default
-        sudo virsh net-start default
-        sudo usermod -a -G kvm,libvirt $localuser
-        serviceenable libvirtd.service
-        serviceenable virtlogd.service
-      fi
-    fi
+    virt_manager
     ;;
   esac
 }
 
+virt_manager() {
+  local options=(
+    "libvirt" "" on
+    "iptables-nft" "" on
+    "dnsmasq" "" on
+    "openbsd-netcat" "" on
+    "dmidecode" "" on
+    "qemu-desktop" "" on
+    "virt-manager" "" on
+    "virt-viewer" "" on
+    "bridge-utils" "" on
+    "swtpm" "" on
+  )
+
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" -1 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
+    for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
+    done
+
+    instpkg "$pkg" "$aurpkg"
+
+    if (pacman -Qs libvirt >/dev/null); then
+      virt_manager_configuration
+    fi
+  fi
+}
+
+virt_manager_configuration() {
+  clear
+
+  # Backup libvirtd.conf
+  sudo cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.bak
+  # Configure libvirtd.conf
+  if ! grep -q "unix_sock_group = 'libvirt'" /etc/libvirt/libvirtd.conf; then
+    printf "\nunix_sock_group = 'libvirt'\nunix_sock_rw_perms = '0770'\n" |
+      sudo tee -a /etc/libvirt/libvirtd.conf >/dev/null
+  else
+    echo "/etc/libvirt/libvirtd.conf is already modified..."
+  fi
+
+  # Configure qemu.conf
+  if ! grep -q "user = \"$localuser\"" /etc/libvirt/qemu.conf; then
+    printf "\n# User Settings\nuser = \"%s\"\ngroup = \"%s\"\n" "$localuser" "$localuser" |
+      sudo tee -a /etc/libvirt/qemu.conf >/dev/null
+  else
+    echo "/etc/libvirt/qemu.conf is already modified..."
+  fi
+
+  # Configure network.conf
+  if ! grep -q "firewall_backend=\"iptables\"" /etc/libvirt/network.conf; then
+    printf "\nfirewall_backend=\"iptables\"\n" |
+      sudo tee -a /etc/libvirt/network.conf >/dev/null
+  else
+    echo "/etc/libvirt/network.conf is already modified..."
+  fi
+
+  # Update mkinitcpio.conf
+  local virtmodule="virtio virtio_blk virtio_pci virtio_net"
+  local presentmkinitcpiomodules
+  presentmkinitcpiomodules=$(grep '^MODULES=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
+
+  if [[ -z "$presentmkinitcpiomodules" ]]; then
+    sudo sed -i "s/^MODULES=()/MODULES=(${virtmodule})/" /etc/mkinitcpio.conf
+  elif ! echo "$presentmkinitcpiomodules" | grep -qw "virtio"; then
+    local newmkinitcpiomodules="${presentmkinitcpiomodules} ${virtmodule}"
+    sudo sed -i "s/^MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/" /etc/mkinitcpio.conf
+  else
+    echo "$virtmodule - Related modules already exist..."
+  fi
+
+  # Create groups if they don't exist
+  for group in libvirt kvm; do
+    if ! getent group "$group" >/dev/null; then
+      sudo groupadd "$group"
+    fi
+  done
+
+  # Configure default network
+  sudo virsh net-autostart default
+  sudo virsh net-start default
+
+  # Add user to groups
+  sudo usermod -aG kvm,libvirt "$localuser"
+
+  # Enable services
+  serviceenable libvirtd.service
+  serviceenable virtlogd.service
+
+  pressanykey
+}
+
 fonts() {
-  options=(
+  local options=(
     "ttf-jetbrains-mono-nerd" "" on
     "ttf-fantasque-nerd" "" on
     "ttf-ubuntu-nerd" "" on
@@ -1287,33 +1342,36 @@ fonts() {
     "ttf-firacode-nerd" "" on
     "otf-font-awesome" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Fonts :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
       # "") aurpkg="$aurpkg $item" ;;
       *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 themes() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}"
+  local options=(
     "Qogir icon theme" ""
     "Tokyonight GTK theme" ""
     "Mocu xcursor" ""
   )
 
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Themes :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     case $sel in
     "Qogir icon theme")
       clear
@@ -1343,20 +1401,17 @@ themes() {
 }
 
 demenu() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}"
+  local options=(
     "Hyprland" ""
     "KDE/Plasma" ""
     "Gnome" ""
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Display Manager :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
-  if [ "$?" = 0 ]; then
+  if [[ "$?" -eq 0 ]]; then
     case $sel in
     "Hyprland")
       hyprland
@@ -1376,7 +1431,7 @@ demenu() {
 }
 
 hyprland() {
-  options=(
+  local options=(
     "hyprland" "" on
     "hyprpaper" "" on
     "hypridle" "" on
@@ -1411,26 +1466,28 @@ hyprland() {
     "blueberry" "" on
     "dconf" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Hyprland :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      "hyprpicker") aurpkg="$aurpkg $item" ;;
-      "waybar-updates") aurpkg="$aurpkg $item" ;;
-      "wlogout") aurpkg="$aurpkg $item" ;;
-      "wlogout-git") aurpkg="$aurpkg $item" ;;
-      "swww") aurpkg="$aurpkg $item" ;;
-      "iwgtk") aurpkg="$aurpkg $item" ;;
+      "hyprpicker" | "waybar-updates" | "wlogout" | "wlogout-git" | "swww" | "iwgtk")
+        aurpkg="$aurpkg $item"
+        ;;
       *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 plasma() {
-  options=(
+  local options=(
     "plasma" "" on
     "plasma-wayland-session" "" on
     "ark" "" on
@@ -1466,24 +1523,28 @@ plasma() {
     "plasma5-applets-window-appmenu-git" "(AUR)" off
     "sddm-conf-git" "(AUR)" off
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "KDE/Plasma :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      "latte-dock-git") aurpkg="$aurpkg $item" ;;
-      "plasma5-applets-virtual-desktop-bar-git") aurpkg="$aurpkg $item" ;;
-      "plasma5-applets-window-appmenu-git") aurpkg="$aurpkg $item" ;;
-      "sddm-conf-git") aurpkg="$aurpkg $item" ;;
+      "latte-dock-git" | "plasma5-applets-virtual-desktop-bar-git" | "plasma5-applets-window-appmenu-git" | "sddm-conf-git")
+        aurpkg="$aurpkg $item"
+        ;;
       *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 gnome() {
-  options=(
+  local options=(
     "baobab" "" on
     "eog" "" on
     "evince" "" on
@@ -1530,28 +1591,37 @@ gnome() {
     "gnome-software-packagekit-plugin" "" on
     "packagekit" "" on
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Gnome :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
       case $item in
       # "") aurpkg="$aurpkg $item" ;;
       *) pkg="$pkg $item" ;;
       esac
     done
+
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 displaymanager() {
-  options=(
+  local options=(
     "gdm" "Gnome Login"
     "sddm" "QT5 Login"
     "sddm-git" "(AUR)"
     "lxdm" "LXDE Login"
     "lightdm-gtk-greeter" "Other Login"
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Display Manager :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     case $sel in
     "gdm")
       instpkg gdm
@@ -1582,107 +1652,154 @@ displaymanager() {
 }
 
 configmenu() {
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
+  local nextitem="${1:-.}"
+  local options=(
     "Dotfiles" ""
-    "Swap file settings" "systemd-boot kernel module"
-    "Network settings" "For sharing"
+    "Swap file configs" "systemd-boot kernel module"
+    "Network configs" "For sharing"
   )
 
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Confg Menu" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = "0" ]; then
+
+  if [[ "$?" = "0" ]]; then
     case ${sel} in
     "Dotfiles")
       dotfilesmenu
-      nextitem="Swap file settings"
+      nextitem="Swap file configs"
       ;;
-    "Swap file settings")
+    "Swap file configs")
       if (confirm "Do you want to apply kernel module for hibernation ? \nOnly for systemd-boot loader!!! \n "); then
-        # /etc/kernel/cmdline
-        presentkernelcmdline=$(cat /etc/kernel/cmdline)
-        swapfileuuid=$(findmnt -no UUID -T /swapfile)
-        swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print substr($4, 1, length($4)-2)}')
-        if (echo $presentkernelcmdline | grep "$swapfileuuid"); then
-          clear
-          message "Kernel modules for hibernation already exist... \nCheck /etc/kernel/cmdline"
-        else
-          newkernelcmdline="${presentkernelcmdline} resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
-          echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
-          clear
-          sudo mkinitcpio -P
-        fi
-        # /etc/mkinitcpio.conf - HOOKS
-        presentmkinitcpiohooks=$(cat /etc/mkinitcpio.conf | grep 'HOOKS' | awk -F\) '{print $1}' | tr -d 'HOOKS=(')
-        swapfilehook="resume"
-        if (echo $presentmkinitcpiohooks | grep "$swapfilehook" >/dev/null); then
-          # sleep 1
-          clear
-          message "$swapfilehook -  Related modules already exist in HOOKS... \nCheck /etc/mkinitcpio.conf "
-        else
-          clear
-          sudo sed -i -e 's/fsck/resume fsck/g' /etc/mkinitcpio.conf
-          sudo mkinitcpio -P
-          pressanykey
-        fi
+        swap_file_config
       else
         message "Nothing changed !"
       fi
-      nextitem="Network settings"
+      nextitem="Network configs"
       ;;
-    "Network settings")
-      options=(
-        "samba" "" on
-        "avahi" "" on
-      )
-      sel=$(dialog --backtitle "$apptitle" --title "Network :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-      if [ "$?" = "0" ]; then
-        for item in $sel; do
-          case $item in
-          # "") aurpkg="$aurpkg $item" ;;
-          *) pkg="$pkg $item" ;;
-          esac
-        done
-        instpkg "$pkg" "$aurpkg"
-        if (pacman -Qs samba); then
-          clear
-          printf "%s\n" \
-            "[global]" \
-            "workgroup = WORKGROUP" \
-            "usershare path = /var/lib/samba/usershares" \
-            "usershare max shares = 100" \
-            "usershare allow guests = yes" \
-            "usershare owner only = yes" \
-            "server string = Samba Server" \
-            "client min protocol = CORE" \
-            "server min protocol = CORE" \
-            "; server max protocol = SMB3" \
-            "server role = standalone server" \
-            "log file = /var/log/samba/%m.log" \
-            "logging = file" \
-            "max log size = 1000" | sudo tee /etc/samba/smb.conf >/dev/null
-          sleep 2
-          serviceenable smb
-          serviceenable nmb
-          sudo systemctl start smb.service nmb.service
-          sudo mkdir -p /var/lib/samba/usershares
-          sudo groupadd -r sambashare
-          sudo chown root:sambashare /var/lib/samba/usershares
-          sudo chmod 1770 /var/lib/samba/usershares
-          sudo gpasswd sambashare -a $localuser
-          sudo systemctl restart smb.service nmb.service
-          sudo smbpasswd -a $localuser
-          serviceenable avahi-daemon.service
-        fi
-      fi
-      nextitem="Network settings"
+    "Network configs")
+      network_config
+      nextitem="Network configs"
       ;;
     esac
+
     configmenu "${nextitem}"
+  fi
+}
+
+swap_file_config() {
+  # Update /etc/kernel/cmdline
+  local presentkernelcmdline
+  presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
+  swapfileuuid=$(findmnt -no UUID -T /swapfile)
+  swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print substr($4, 1, length($4)-2)}')
+
+  clear
+
+  if ! grep -q "$swapfileuuid" <<<$presentkernelcmdline; then
+    local newkernelcmdline
+    newkernelcmdline="${presentkernelcmdline} resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
+    echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
+    sudo mkinitcpio -P
+  else
+    message "Kernel modules are already exist for hibernation... \nCheck /etc/kernel/cmdline"
+  fi
+
+  # Update /etc/mkinitcpio.conf - HOOKS
+  local swapfilehook="resume"
+  local presentmkinitcpiohooks
+  presentmkinitcpiohooks=$(grep '^HOOKS=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
+
+  if ! grep -q "$swapfilehook" <<<$presentmkinitcpiohooks; then
+    sudo sed -i -e 's/fsck/resume fsck/' /etc/mkinitcpio.conf
+    sudo mkinitcpio -P
+  else
+    echo "$swapfilehook -  Related modules are already exist in HOOKS... \nCheck /etc/mkinitcpio.conf "
+  fi
+
+  pressanykey
+}
+
+network_config() {
+  local options=(
+    "samba" "" on
+    "avahi" "" on
+  )
+
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "Network :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [[ "$?" -eq "0" ]]; then
+    local pkg="" aurpkg=""
+    for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
+      case $item in
+      # "") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
+      esac
+    done
+
+    instpkg "$pkg" "$aurpkg"
+
+    if pacman -Qs samba >/dev/null; then
+      clear
+
+      # Backup samba config
+      sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
+
+      # Create Samba configuration with safer defaults
+      sudo mkdir -p /etc/samba # Ensure directory exists
+      printf "%s\n" \
+        "[global]" \
+        "workgroup = WORKGROUP" \
+        "usershare path = /var/lib/samba/usershares" \
+        "usershare max shares = 100" \
+        "usershare allow guests = no" \
+        "server string = Samba Server" \
+        "client min protocol = SMB3" \
+        "server min protocol = SMB3" \
+        "server role = standalone server" \
+        "log file = /var/log/samba/%%m.log" \
+        "max log size = 1000" \
+        "vfs objects = fruit streams_xattr" \
+        "fruit:metadata = stream" \
+        "fruit:model = Macintosh" | sudo tee /etc/samba/smb.conf >/dev/null
+
+      # Create usershare directory
+      sudo mkdir -p /var/lib/samba/usershares
+      sudo chown root:sambashare /var/lib/samba/usershares
+      sudo chmod 1770 /var/lib/samba/usershares
+
+      # Configure sambashare group
+      if ! getent group sambashare >/dev/null; then
+        sudo groupadd -r sambashare
+      fi
+      sudo gpasswd -a "$localuser" sambashare
+
+      # Restart services
+      sudo systemctl restart smb.service nmb.service
+
+      # Set Samba password interactively
+      echo "Set a password for Samba user $localuser:"
+      sudo smbpasswd -a "$localuser"
+
+      # Enable core services
+      serviceenable smb
+      serviceenable nmb
+    fi
+
+    # Conditionally enable Avahi
+    if [[ "$sel" == *"avahi"* ]] && pacman -Qs avahi >/dev/null; then
+      serviceenable avahi-daemon.service
+    fi
+
+    # If using firewalld
+    if command -v firewall-cmd >/dev/null; then
+      sudo firewall-cmd --permanent --add-service=samba
+      sudo firewall-cmd --reload
+    fi
+
+    echo "Samba configuration complete. Reboot or restart services to apply changes."
+    pressanykey
   fi
 }
 
