@@ -1669,10 +1669,10 @@ configmenu() {
       nextitem="Swap file configs"
       ;;
     "Swap file configs")
-      if (confirm "Do you want to apply kernel module for hibernation ? \nOnly for systemd-boot loader!!! \n "); then
+      if confirm "\nDo you want to apply kernel module for hibernation ? \nOnly for systemd-boot loader!!! \n " "" 10 60; then
         swap_file_config
       else
-        message "Nothing changed !"
+        message "\nNo changes have been made !" "" 6 40
       fi
       nextitem="Network configs"
       ;;
@@ -1686,34 +1686,101 @@ configmenu() {
   fi
 }
 
+# swap_file_config() {
+#   # Update /etc/kernel/cmdline
+#   local presentkernelcmdline
+#   presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
+#   swapfileuuid=$(findmnt -no UUID -T /swapfile)
+#   swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print substr($4, 1, length($4)-2)}')
+#
+#   clear
+#
+#   if ! grep -q "$swapfileuuid" <<<$presentkernelcmdline; then
+#     local newkernelcmdline
+#     newkernelcmdline="${presentkernelcmdline} resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
+#     echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
+#     sudo mkinitcpio -P
+#   else
+#     message "Kernel modules are already exist for hibernation... \nCheck /etc/kernel/cmdline"
+#   fi
+#
+#   # Update /etc/mkinitcpio.conf - HOOKS
+#   local swapfilehook="resume"
+#   local presentmkinitcpiohooks
+#   presentmkinitcpiohooks=$(grep '^HOOKS=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
+#
+#   if ! grep -q "$swapfilehook" <<<$presentmkinitcpiohooks; then
+#     sudo sed -i -e 's/fsck/resume fsck/' /etc/mkinitcpio.conf
+#     sudo mkinitcpio -P
+#   else
+#     echo "$swapfilehook -  Related modules are already exist in HOOKS... \nCheck /etc/mkinitcpio.conf "
+#   fi
+#
+#   pressanykey
+# }
+
 swap_file_config() {
-  # Update /etc/kernel/cmdline
-  local presentkernelcmdline
-  presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
-  swapfileuuid=$(findmnt -no UUID -T /swapfile)
-  swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print substr($4, 1, length($4)-2)}')
-
-  clear
-
-  if ! grep -q "$swapfileuuid" <<<$presentkernelcmdline; then
-    local newkernelcmdline
-    newkernelcmdline="${presentkernelcmdline} resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
-    echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
-    sudo mkinitcpio -P
-  else
-    message "Kernel modules are already exist for hibernation... \nCheck /etc/kernel/cmdline"
+  # Check if swapfile exists and is active
+  if [[ ! -f /swapfile ]] || ! swapon --show=name | grep -q "/swapfile"; then
+    echo "Error: /swapfile not found or not active. Create and activate it first."
+    return 1
   fi
 
-  # Update /etc/mkinitcpio.conf - HOOKS
-  local swapfilehook="resume"
-  local presentmkinitcpiohooks
-  presentmkinitcpiohooks=$(grep '^HOOKS=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
+  # Verify required tools are installed
+  if ! command -v filefrag >/dev/null; then
+    echo "Installing required tools (e2fsprogs)..."
+    sudo pacman -S e2fsprogs --noconfirm || return 1
+  fi
 
-  if ! grep -q "$swapfilehook" <<<$presentmkinitcpiohooks; then
-    sudo sed -i -e 's/fsck/resume fsck/' /etc/mkinitcpio.conf
+  # Get swapfile details safely
+  local swapfileuuid swapfileoffset
+  swapfileuuid=$(findmnt -no UUID -T /swapfile 2>/dev/null) || {
+    echo "Error: Failed to get swapfile UUID"; return 1
+  }
+  swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print $4}' | tr -d '.') || {
+    echo "Error: Failed to get swapfile offset"; return 1
+  }
+
+  # Verify obtained values
+  if [[ -z "$swapfileuuid" || -z "$swapfileoffset" ]]; then
+    echo "Error: Could not determine swapfile parameters"; return 1
+  fi
+
+  # Kernel cmdline configuration
+  local presentkernelcmdline newkernelcmdline
+  presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
+  local resume_params="resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
+
+  if ! grep -Pq "resume=UUID=\S+\s+resume_offset=\d+" <<<"$presentkernelcmdline"; then
+    # Clean existing resume params if any
+    newkernelcmdline=$(sed -E 's/\s*resume=[^ ]+//g;s/\s*resume_offset=[^ ]+//g' <<<"$presentkernelcmdline")
+    newkernelcmdline="$newkernelcmdline $resume_params"
+    echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
     sudo mkinitcpio -P
   else
-    echo "$swapfilehook -  Related modules are already exist in HOOKS... \nCheck /etc/mkinitcpio.conf "
+    message "Hibernation parameters already exist in cmdline:\n$(grep -Po 'resume=.*?(\s|$)' <<<"$presentkernelcmdline")"
+  fi
+
+  # mkinitcpio hooks configuration
+  local mkinitfile="/etc/mkinitcpio.conf"
+  if ! grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
+    sudo sed -i '/^HOOKS=/s/\(.*fsck.*\)/\1 resume/' "$mkinitfile"
+    sudo mkinitcpio -P
+  else
+    echo "Resume hook already exists in mkinitcpio.conf"
+  fi
+
+  # Final verification
+  if grep -q "$resume_params" /etc/kernel/cmdline && 
+     grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
+    message "Swapfile configured successfully for hibernation!\n\nYou need to reboot to apply changes."
+  else
+    echo "Error: Configuration might have failed. Please verify manually:"
+    echo "- /etc/kernel/cmdline contents:"
+    cat /etc/kernel/cmdline
+    echo -e "\n- mkinitcpio hooks:"
+    grep '^HOOKS=' "$mkinitfile"
+    return 1
   fi
 
   pressanykey
@@ -2092,7 +2159,7 @@ if [ ! $(id -u) = 0 ]; then
   rm $scriptdir/colors
   clear
 else
-  echo "The script does not run as root (or under root user)."
+  echo "The script doesn't run as root (or under root user)."
   exit 1
 fi
 
