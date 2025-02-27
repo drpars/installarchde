@@ -1686,40 +1686,9 @@ configmenu() {
   fi
 }
 
-# swap_file_config() {
-#   # Update /etc/kernel/cmdline
-#   local presentkernelcmdline
-#   presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
-#   swapfileuuid=$(findmnt -no UUID -T /swapfile)
-#   swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print substr($4, 1, length($4)-2)}')
-#
-#   clear
-#
-#   if ! grep -q "$swapfileuuid" <<<$presentkernelcmdline; then
-#     local newkernelcmdline
-#     newkernelcmdline="${presentkernelcmdline} resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
-#     echo $newkernelcmdline | sudo tee /etc/kernel/cmdline >/dev/null
-#     sudo mkinitcpio -P
-#   else
-#     message "Kernel modules are already exist for hibernation... \nCheck /etc/kernel/cmdline"
-#   fi
-#
-#   # Update /etc/mkinitcpio.conf - HOOKS
-#   local swapfilehook="resume"
-#   local presentmkinitcpiohooks
-#   presentmkinitcpiohooks=$(grep '^HOOKS=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
-#
-#   if ! grep -q "$swapfilehook" <<<$presentmkinitcpiohooks; then
-#     sudo sed -i -e 's/fsck/resume fsck/' /etc/mkinitcpio.conf
-#     sudo mkinitcpio -P
-#   else
-#     echo "$swapfilehook -  Related modules are already exist in HOOKS... \nCheck /etc/mkinitcpio.conf "
-#   fi
-#
-#   pressanykey
-# }
-
 swap_file_config() {
+  clear
+
   # Check if swapfile exists and is active
   if [[ ! -f /swapfile ]] || ! swapon --show=name | grep -q "/swapfile"; then
     echo "Error: /swapfile not found or not active. Create and activate it first."
