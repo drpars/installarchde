@@ -1704,15 +1704,18 @@ swap_file_config() {
   # Get swapfile details safely
   local swapfileuuid swapfileoffset
   swapfileuuid=$(findmnt -no UUID -T /swapfile 2>/dev/null) || {
-    echo "Error: Failed to get swapfile UUID"; return 1
+    echo "Error: Failed to get swapfile UUID"
+    return 1
   }
   swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print $4}' | tr -d '.') || {
-    echo "Error: Failed to get swapfile offset"; return 1
+    echo "Error: Failed to get swapfile offset"
+    return 1
   }
 
   # Verify obtained values
   if [[ -z "$swapfileuuid" || -z "$swapfileoffset" ]]; then
-    echo "Error: Could not determine swapfile parameters"; return 1
+    echo "Error: Could not determine swapfile parameters"
+    return 1
   fi
 
   # Kernel cmdline configuration
@@ -1740,8 +1743,8 @@ swap_file_config() {
   fi
 
   # Final verification
-  if grep -q "$resume_params" /etc/kernel/cmdline && 
-     grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
+  if grep -q "$resume_params" /etc/kernel/cmdline &&
+    grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
     message "Swapfile configured successfully for hibernation!\n\nYou need to reboot to apply changes."
   else
     echo "Error: Configuration might have failed. Please verify manually:"
@@ -1840,24 +1843,9 @@ network_config() {
 }
 
 dotfilesmenu() {
-  backupdir="/home/$localuser/.dotfiles/backup"
-  clonedir="/home/$localuser/.dotfiles/hypr-dot"
-  configfiles="$(ls $clonedir/config)"
-  wallpaperdir="$(xdg-user-dir PICTURES)"
-  homefiles="
-          .gitconfig
-          .gtkrc-2.0
-          .zshrc
-        "
-
-  if [ "${1}" = "" ]; then
-    nextitem="."
-  else
-    nextitem=${1}
-  fi
-
-  options=(
-    "Copy neovim dotfiles" ""
+  local nextitem="${1:-.}"
+  local options=(
+    "Install neovim dotfiles" ""
     "Install ohmyzsh" ""
     "Copy fonts" ""
     "Copy sddm themes" ""
@@ -1868,208 +1856,38 @@ dotfilesmenu() {
     "Remove neovim dotfiles" ""
   )
 
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Dotfiles :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = "0" ]; then
-    case ${sel} in
-    "Copy neovim dotfiles")
-      if (confirm "Do you want to copy nvim dotfiles ? \n "); then
-        clear
-        git clone https://github.com/drpars/nvim.git /home/$localuser/.config/nvim
-        message "Nvim dotfiles are copied. \n "
 
-        if (confirm "Also do you want to copy nvim for root \n "); then
-          if [ ! -d /root/.config/nvim ]; then
-            sudo mkdir -p /root/.config/nvim
-          fi
-          sudo ln -sf /home/$localuser/.config/nvim/* /root/.config/nvim
-          message "Nvim dotfiles are copied for root. \n "
-        fi
-      fi
+  if [[ "$?" -eq 0 ]]; then
+    case ${sel} in
+    "Install neovim dotfiles")
+      neovim_dot
       nextitem="Install ohmyzsh"
       ;;
     "Install ohmyzsh")
-      if (confirm "Do you want to install ohmyzsh ? \n "); then
-        if [ -f /usr/bin/zsh ]; then
-          message "Oh my zsh will want to replace bash. \nTo continue, \nyou must confirm & type exit."
-          if [ ! -d /home/$localuser/.ohmyzsh ]; then
-            clear
-            # for home user
-            sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-            git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-            git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-          else
-            message "Oh my zsh is already installed for /home/$localuser."
-          fi
-          # for root user
-          if (confirm "Do you want to install also for root ? \n"); then
-            if [ ! -d /root/.ohmyzsh ]; then
-              clear
-              sudo sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-              sudo git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
-              sudo git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-            else
-              message "Oh my zsh is already installed for root."
-            fi
-          fi
-          pressanykey
-        else
-          message "zsh not detected !!"
-        fi
-      fi
+      install_oh_my_zsh
       nextitem="Copy fonts"
       ;;
     "Copy fonts")
-      if (confirm "Do you want to copy fonts ? \n "); then
-        ishyprdot
-        message "/home/$localuser/.fonts will back up to $backupdir"
-        if [ ! -d /home/$localuser/.fonts ]; then
-          ln -sr $clonedir/.fonts /home/$localuser
-        else
-          mv /home/$localuser/.fonts $backupdir
-          ln -sr $clonedir/.fonts /home/$localuser
-        fi
-      fi
       nextitem="Copy sddm themes"
       ;;
     "Copy sddm themes")
-      if (confirm "Do you want to copy themes for sddm ?"); then
-        ishyprdot
-        clear
-        if [ -f /usr/bin/sddm ]; then
-          sddm_conf_dir="/etc/sddm.conf.d"
-          if [ ! -d $sddm_conf_dir ]; then
-            message "$sddm_conf_dir not found, creating...\n"
-            sudo mkdir $sddm_conf_dir
-          fi
-          printf "%s\n" "[Theme]" "Current=sugar-candy" | sudo tee $sddm_conf_dir/10-theme.conf >/dev/null
-          sudo cp $clonedir/sddm/sddm.conf $sddm_conf_dir
-          sugar_candy_dir="/usr/share/sddm/themes/sugar-candy"
-          if [ ! -d "$sugar_candy_dir" ]; then
-            message "$sugar_candy_dir not found, creating...\n"
-            sudo mkdir -p $sugar_candy_dir
-            sudo tar -xzvf $clonedir/sddm/sugar-candy/sugar-candy.tar.gz -C /usr/share/sddm/themes
-            sudo cp $clonedir/sddm/sugar-candy/theme.conf $sugar_candy_dir
-          else
-            message "$sugar_candy_dir is exist found, Backed up to $backupdir/sddmbackup.\n"
-            if [ ! -d $backupdir/sddmbackup ]; then
-              mkdir -p $backupdir/sddmbackup
-            fi
-            sudo mv $sugar_candy_dir $backupdir/sddmbackup
-            sudo mkdir -p $sugar_candy_dir
-            sudo tar -xzvf $clonedir/sddm/sugar-candy/sugar-candy.tar.gz -C /usr/share/sddm/themes
-            sudo cp $clonedir/sddm/sugar-candy/theme.conf $sugar_candy_dir
-          fi
-          message "Sddm theme is successfully copied. "
-        else
-          message "Sddm not installed. \nFirstly install sddm!"
-        fi
-      fi
       nextitem="Copy wallpaper"
       ;;
     "Copy wallpaper")
-      if (confirm "Do do you want to copy wallpapers to $wallpaperdir ? \n "); then
-        clear
-        git clone https://github.com/drpars/Wallpaper.git $wallpaperdir
-        message "Wallpapers are copied to $wallpaperdir ."
-      fi
       nextitem="Copy Hyprland dotfiles"
       ;;
     "Copy Hyprland dotfiles")
-      if (confirm "Do do you want to copy hyprland dotfiles ? \n "); then
-        ishyprdot
-        clear
-        mkdir -p $backupdir
-        # for ~/.dotfiles/hypr-dot
-        if [ -d $clonedir ]; then
-          if diff -r hypr-dot $clonedir; then
-            message "$clonedir is up to date."
-          else
-            # out of date
-            if (confirm "Hyprland dotfiles are out of date. \nDo you want to backup existing hyprland dotfiles ? \n "); then
-              mkdir -p $backupdir/old
-              mv $clonedir $backupdir/old
-              cp -r hypr-dot /home/$localuser/.dotfiles/
-              message "Existing files are backed up to $backupdir/old \nNew files are copied to $clonedir ."
-            else
-              rm -rf $clonedir
-              cp -r hypr-dot /home/$localuser/.dotfiles/
-              message "New files are copied to $clonedir ."
-            fi
-          fi
-        else
-          mkdir -p $clonedir
-          cp -r hypr-dot /home/$localuser/.dotfiles/
-          message "New files are copied to $clonedir ."
-        fi
-        # backup for ~/.config files
-        for selconfig in $configfiles; do
-          if [ -d /home/$localuser/.config/$selconfig ]; then
-            mv /home/$localuser/.config/$selconfig $backupdir
-          elif [ -L /home/$localuser/.config/$selconfig ]; then
-            rm /home/$localuser/.config/$selconfig
-          fi
-        done
-        message "Dotfiles in /home/$localuser/.config are backed up to $backupdir . \n "
-        # creating new dotfiles
-        ln -sr $clonedir/config/* /home/$localuser/.config
-        for selhomefiles in $homefiles; do
-          if [ ! -f /home/$localuser/$selhomefiles ]; then
-            ln -sr $clonedir/$selhomefiles /home/$localuser
-          else
-            mv /home/$localuser/$selhomefiles $backupdir
-            ln -sr $clonedir/$selhomefiles /home/$localuser
-          fi
-        done
-        if (pacman -Qs bat); then
-          bat cache --build
-        fi
-        if [ ! -d /usr/share/gnome-text-editor/styles ]; then
-          mkdir -p /usr/share/gnome-text-editor/styles
-          sudo cp $clonedir/gnome-text-editor/tokyonight-dark.xml /usr/share/gnome-text-editor/styles/
-        else
-          if [ ! -f /usr/share/gnome-text-editor/styles/tokyonight-dark.xml ]; then
-            sudo cp $clonedir/gnome-text-editor/tokyonight-dark.xml /usr/share/gnome-text-editor/styles/
-          fi
-        fi
-        # for /root
-        if [ -f /root/.zshrc ]; then
-          sudo rm /root/.zshrc
-          sudo cp $clonedir/root/.zshrc /root
-        fi
-        message "Updated hyprland dotfiles are added to /home/$localuser/.config folder. "
-      fi
       nextitem="Authorize Neovim dotfiles"
       ;;
     "Authorize Neovim dotfiles")
-      if (confirm "Do you want to authorize /home/$localuser/.config/nvim with github token key?"); then
-        username=$(dialog --backtitle "$apptitle" --title "Authorize nvim repo" --inputbox "Enter your github user name :" 0 0 3>&1 1>&2 2>&3)
-        token=$(dialog --backtitle "$apptitle" --title "Authorize nvim repo" --inputbox "Enter your github token key :" 0 0 3>&1 1>&2 2>&3)
-        clear
-        cd /home/$localuser/.config/nvim
-        git remote set-url origin https://$username:$token@github.com/$username/nvim.git
-        message "/home/$localuser/nvim is authorized."
-      fi
       nextitem="Authorize Hyprland dotfiles"
       ;;
     "Authorize Hyprland dotfiles")
-      if (confirm "Do you want to authorize $clonedir with github token key?"); then
-        username=$(dialog --backtitle "$apptitle" --title "Authorize hypr-dot repo" --inputbox "Enter your github user name :" 0 0 3>&1 1>&2 2>&3)
-        token=$(dialog --backtitle "$apptitle" --title "Authorize hypr-dot repo" --inputbox "Enter your github token key :" 0 0 3>&1 1>&2 2>&3)
-        clear
-        cd $clonedir
-        git remote set-url origin https://$username:$token@github.com/$username/hypr-dot.git
-        message "$clonedir is authorized."
-      fi
       nextitem="Authorize Hyprland dotfiles"
       ;;
     "Remove neovim dotfiles")
-      if (confirm "Do you want to remove nvim dotfiles ? \n "); then
-        clear
-        rm -rf /home/$localuser/.config/nvim
-        rm -rf /home/$localuser/.local/share/nvim
-        rm -rf /home/$localuser/.cache/nvim
-        message "Nvim dotfiles are completely removed. \n "
-      fi
       nextitem="Remove neovim dotfiles"
       ;;
     esac
@@ -2077,21 +1895,80 @@ dotfilesmenu() {
   fi
 }
 
+neovim_dot() {
+  if confirm "\nDo you want to install neovim dotfiles for "$localuser" ?" "" 8 60; then
+    clear
+
+    git clone https://github.com/drpars/nvim.git /home/"$localuser"/.config/nvim
+    message "\nNeovim dotfiles are installed." "" 8 40
+
+    if confirm "\nAlso, do you want to install NeoVim dotfiles for root." "" 8 60; then
+      sudo mkdir -p /root/.config/nvim
+      sudo ln -sf /home/$localuser/.config/nvim/* /root/.config/nvim
+      message "\nNvim dotfiles are copied for root." "" 8 40
+    fi
+  fi
+}
+
+install_oh_my_zsh() {
+  if confirm "\nDo you want to install oh my zsh for "$localuser" ?" "" 8 60; then
+    if command -v zsh; then
+      if [[ ! -d /home/$localuser/.ohmyzsh ]]; then
+        clear
+
+        # Install oh my zsh - LocalUser
+        echo -e "n" | sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+        # Install oh my zsh plugins
+        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+        git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+        message "\nOh my zsh is installed for "$localuser"." "" 8 60
+      else
+        message "\nOh my zsh is already installed for "$localuser"." "" 8 60
+      fi
+
+      # RootUser
+      if confirm "\nDo you want to install also for root ?" "" 8 60; then
+        if [[ ! -d /root/.ohmyzsh ]]; then
+          clear
+
+          # Install oh my zsh - RootUser
+          sudo echo -e "n" | sudo sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+          # Install oh my zsh plugins
+          sudo git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
+          sudo git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions
+          message "\nOh my zsh is installed for \/root." "" 8 60
+        else
+          message "\nOh my zsh is already installed for \/root." "" 8 60
+        fi
+      fi
+      pressanykey
+    else
+      if confirm "\nzsh not detected. \nDo you want to install zsh ?" "" 10 60; then
+        install "zsh" ""
+        message "\nzsh is installed." "" 8 40
+      fi
+    fi
+  fi
+}
+
 shutdownmenu() {
-  options=(
+  local options=(
     "Reboot" ""
     "Shutdown" ""
   )
+
+  local sel
   sel=$(dialog --backtitle "$apptitle" --title "Shutdown :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-  if [ "$?" = 0 ]; then
+
+  if [[ "$?" -eq 0 ]]; then
     case $sel in
     "Reboot")
-      if (confirm "Reboot now ?" --defaultno); then
+      if confirm "Reboot now ?" "" 6 30; then
         reboot
       fi
       ;;
     "Shutdown")
-      if (confirm "Shutdown now ?" --defaultno); then
+      if confirm "Shutdown now ?" "" 6 30; then
         poweroff
       fi
       ;;
@@ -2099,7 +1976,7 @@ shutdownmenu() {
   fi
 }
 
-if [ ! $(id -u) = 0 ]; then
+if [[ ! $(id -u) -eq 0 ]]; then
   echo "Arch Linux Installation is starting ..."
   sudo pacman -S --needed dialog neovim
   printf "%s\n" \
