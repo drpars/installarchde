@@ -38,7 +38,7 @@ mainmenu() {
       ;;
     esac
 
-    # Recursively call mainmenu with the next item
+    # Recursively call main menu with the next item
     mainmenu "${nextitem}"
   fi
 }
@@ -192,10 +192,20 @@ servicedisable() {
 ishyprdot() {
   if [[ ! -d hypr-dot ]]; then
     clear
-    echo "Cloning hypr-dot repository..."
+    echo "Cloning hypr-dot repository temporaryly..."
     git clone https://github.com/drpars/hypr-dot.git
   else
     echo "hypr-dot repository already exists."
+  fi
+}
+
+# Function to install rsync if it doesn't exist
+isrsync() {
+  if ! command -v rsync &>/dev/null; then
+    clear
+    echo "Installing rsync ..."
+    instpkg "rsync" ""
+    pressanykey
   fi
 }
 
@@ -1845,49 +1855,64 @@ network_config() {
 dotfilesmenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Install neovim dotfiles" ""
-    "Install ohmyzsh" ""
-    "Copy fonts" ""
-    "Copy sddm themes" ""
-    "Copy wallpaper" ""
-    "Copy Hyprland dotfiles" ""
-    "Authorize Neovim dotfiles" ""
-    "Authorize Hyprland dotfiles" ""
+    "Neovim" ""
+    "Oh my zsh" "With spaceship"
+    "All Dotfiles" ""
+    "Fonts" ""
+    "Sddm theme" "Sugar-Candy"
+    "Wallpapers" ""
     "Remove neovim dotfiles" ""
+    "Remove oh my zsh" ""
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Dotfiles :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Dotfiles :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 60 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Install neovim dotfiles")
+    "Neovim")
       neovim_dot
-      nextitem="Install ohmyzsh"
+      nextitem="Oh my zsh"
       ;;
-    "Install ohmyzsh")
-      install_oh_my_zsh
-      nextitem="Copy fonts"
+    "Oh my zsh")
+      install_ohmyzsh
+      nextitem="All Dotfiles"
       ;;
-    "Copy fonts")
-      nextitem="Copy sddm themes"
+    "All Dotfiles")
+      dotfiles_selective
+      nextitem="Fonts"
       ;;
-    "Copy sddm themes")
-      nextitem="Copy wallpaper"
+    "Fonts")
+      install_fonts
+      nextitem="Wallpapers"
       ;;
-    "Copy wallpaper")
-      nextitem="Copy Hyprland dotfiles"
+    "Wallpapers")
+      install_wallpapers
+      nextitem="Sddm theme"
       ;;
-    "Copy Hyprland dotfiles")
-      nextitem="Authorize Neovim dotfiles"
-      ;;
-    "Authorize Neovim dotfiles")
-      nextitem="Authorize Hyprland dotfiles"
-      ;;
-    "Authorize Hyprland dotfiles")
-      nextitem="Authorize Hyprland dotfiles"
+    "Sddm theme")
+      install_sddmtheme
+      nextitem="Remove neovim dotfiles"
       ;;
     "Remove neovim dotfiles")
+      if confirm "\nDo you want to remove nvim dotfiles ?" "" 8 60; then
+        rm -rf /home/$localuser/.config/nvim
+        rm -rf /home/$localuser/.local/share/nvim
+        rm -rf /home/$localuser/.cache/nvim
+        if [[ "$?" -eq 0 ]]; then
+          message "\nNvim dotfiles are completely removed." "" 8 60
+        fi
+      fi
+      nextitem="Remove oh my zsh"
+      ;;
+    "Remove oh my zsh")
+      if confirm "\nDo you want to remove oh my zsh?" "" 8 60; then
+        rm -rf /home/$localuser/.oh-my-zsh
+        sudo rm -rf /root/.oh-my-zsh
+        if [[ "$?" -eq 0 ]]; then
+          message "\nOh my zsh completely removed." "" 8 60
+        fi
+      fi
       nextitem="Remove neovim dotfiles"
       ;;
     esac
@@ -1910,17 +1935,20 @@ neovim_dot() {
   fi
 }
 
-install_oh_my_zsh() {
+install_ohmyzsh() {
   if confirm "\nDo you want to install oh my zsh for "$localuser" ?" "" 8 60; then
-    if command -v zsh; then
+    if command -v zsh &>/dev//null; then
       if [[ ! -d /home/$localuser/.ohmyzsh ]]; then
         clear
 
-        # Install oh my zsh - LocalUser
+        # Local User - Install oh my zsh
         echo -e "n" | sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
         # Install oh my zsh plugins
         git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
         git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+        sudo git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
+        # Apple spaceship theme
+        ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
         message "\nOh my zsh is installed for "$localuser"." "" 8 60
       else
         message "\nOh my zsh is already installed for "$localuser"." "" 8 60
@@ -1936,9 +1964,12 @@ install_oh_my_zsh() {
           # Install oh my zsh plugins
           sudo git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
           sudo git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-          message "\nOh my zsh is installed for \/root." "" 8 60
+          sudo git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
+          # Apple spaceship theme
+          sudo ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
+          message "\nOh my zsh is installed for //root." "" 8 60
         else
-          message "\nOh my zsh is already installed for \/root." "" 8 60
+          message "\nOh my zsh is already installed for //root." "" 8 60
         fi
       fi
       pressanykey
@@ -1948,6 +1979,276 @@ install_oh_my_zsh() {
         message "\nzsh is installed." "" 8 40
       fi
     fi
+  fi
+}
+
+dotfiles_selective() {
+  # Ensure dependencies exist
+  isrsync
+  ishyprdot || return 1
+
+  # Verify config directory exists
+  if [[ ! -d "hypr-dot/config" ]]; then
+    clear
+    echo "Error: hypr-dot/config directory not found" >&2
+    pressanykey
+    return 1
+  fi
+
+  # --------------------------
+  # Part 1: .config Files
+  # --------------------------
+  local options=()
+  while IFS= read -r -d $'\0' item; do
+    local clean_name=$(basename "$item")
+    options+=("$clean_name" "" off)
+  done < <(find hypr-dot/config -mindepth 1 -maxdepth 1 \( -type d -o -type f \) -print0 | sort -zV)
+
+  if [[ ${#options[@]} -eq 0 ]]; then
+    clear
+    echo "No dotfiles found in hypr-dot/config" >&2
+    pressanykey
+    return 0
+  fi
+
+  # Show selection dialog
+  local sel
+  sel=$(dialog --backtitle "$apptitle" \
+    --title "Select Dotfiles to Install" \
+    --cancel-button "Back" \
+    --checklist "Choose configurations to sync:" \
+    0 40 0 \
+    "${options[@]}" \
+    3>&1 1>&2 2>&3)
+  local dialog_ret=$?
+  clear
+
+  [[ $dialog_ret -ne 0 ]] && return 1
+
+  # --------------------------
+  # Installation Logic
+  # --------------------------
+  if [[ -n "$sel" ]]; then
+    local backup_dir="$HOME/.config-backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+
+    # Initial confirmation dialog
+    response=$(dialog --backtitle "$apptitle" \
+      --title "Confirmation" \
+      --menu "This will OVERWRITE existing configs. Choose action:" \
+      0 60 0 \
+      "Yes" "Individual confirmations" \
+      "YesAll" "Apply all changes" \
+      "No" "Cancel installation" \
+      3>&1 1>&2 2>&3)
+    clear
+
+    [[ $? -ne 0 ]] && response="No"
+
+    case $response in
+    "Yes")
+      # Individual confirmations
+      for item in $sel; do
+        local item=$(echo "$item" | tr -d '"')
+        local source="hypr-dot/config/$item"
+        local target="$HOME/.config/$item"
+
+        echo -e "Previewing changes for: $item"
+        if [[ -d "$source" ]]; then
+          rsync -avh --dry-run "$source/" "$target/" --delete
+        else
+          rsync -avh --dry-run "$source" "$target" --delete
+        fi
+        pressanykey
+
+        if confirm "Apply these changes for $item?"; then
+          clear
+          echo -e "Applying changes for: $item"
+          [[ -d "$source" ]] && rsync -avh --backup --backup-dir="$backup_dir" "$source/" "$target/" --delete ||
+            rsync -avh --backup --backup-dir="$backup_dir" "$source" "$target" --delete
+          echo -e "Done!"
+          pressanykey
+        fi
+        clear
+      done
+      ;;
+
+    "YesAll")
+      clear
+      echo -e "Previewing ALL changes:\n"
+      for item in $sel; do
+        local item=$(echo "$item" | tr -d '"')
+        local source="hypr-dot/config/$item"
+        local target="$HOME/.config/$item"
+
+        echo -e "─── $item ───"
+        [[ -d "$source" ]] && rsync -avh --dry-run "$source/" "$target/" --delete ||
+          rsync -avh --dry-run "$source" "$target" --delete
+        echo
+      done
+      pressanykey
+
+      if confirm "Apply ALL changes? Backup will be stored in: $backup_dir"; then
+        clear
+        for item in $sel; do
+          local item=$(echo "$item" | tr -d '"')
+          local source="hypr-dot/config/$item"
+          local target="$HOME/.config/$item"
+
+          echo -e "Installing: $item"
+          [[ -d "$source" ]] && rsync -avh --backup --backup-dir="$backup_dir" "$source/" "$target/" --delete ||
+            rsync -avh --backup --backup-dir="$backup_dir" "$source" "$target" --delete
+          pressanykey
+          clear
+        done
+      fi
+      ;;
+
+    *)
+      clear
+      echo -e "\n❌ Installation canceled"
+      pressanykey
+      ;;
+    esac
+
+    # Backup report
+    clear
+    echo -e "\n󰅣 Backup stored in: $backup_dir"
+    [[ $(ls -A "$backup_dir") ]] || echo "No files needed backup (clean install)"
+    pressanykey
+  fi
+
+  # --------------------------
+  # Part 2: $HOME Files
+  # --------------------------
+  clear
+  local home_options=(
+    ".gitconfig" "Git configuration" off
+    ".gtk-2.0" "GTK 2.x configuration" off
+    ".zshrc" "Zsh shell configuration" off
+  )
+
+  local home_sel
+  home_sel=$(dialog --backtitle "$apptitle" \
+    --title "Select Home Dotfiles" \
+    --cancel-button "Back" \
+    --checklist "Choose home configurations:" \
+    0 60 0 \
+    "${home_options[@]}" \
+    3>&1 1>&2 2>&3)
+  clear
+
+  if [[ -n "$home_sel" ]]; then
+    local home_backup_dir="$HOME/home-backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$home_backup_dir"
+
+    echo -e "Previewing home changes:\n"
+    for item in $home_sel; do
+      local item=$(echo "$item" | tr -d '"')
+      local source="hypr-dot/$item"
+      local target="$HOME/$item"
+
+      echo -e "─── $item ───"
+      rsync -avh --dry-run "$source" "$target" --delete
+      echo
+    done
+    pressanykey
+
+    if confirm "Apply ALL home directory changes?"; then
+      clear
+      for item in $home_sel; do
+        local item=$(echo "$item" | tr -d '"')
+        local source="hypr-dot/$item"
+        local target="$HOME/$item"
+
+        echo -e "Installing: $item"
+        rsync -avh --backup --backup-dir="$home_backup_dir" "$source" "$target" --delete
+        pressanykey
+        clear
+      done
+    fi
+
+    # Home backup report
+    clear
+    echo -e "\n󰅣 Home backups stored in: $home_backup_dir"
+    pressanykey
+  fi
+}
+
+install_fonts() {
+  if confirm "\nDo you want to install fonts?" "" 8 40; then
+    # Ensure dependencies are exist
+    isrsync
+    ishyprdot || return 1
+
+    # Bulk processing with preview
+    clear
+    echo -e "\nPreviewing all changes:"
+    rsync -avh --dry-run "hypr-dot/.fonts/" "$HOME/.fonts/"
+    pressanykey
+
+    if confirm "Apply these changes for fonts?"; then
+      clear
+      echo -e "\nInstalling fonts..."
+      rsync -avh "hypr-dot/.fonts/" "$HOME/.fonts/"
+    else
+      echo -e "\nInstallation canceled"
+    fi
+
+    pressanykey
+  fi
+}
+
+install_sddmtheme() {
+  if confirm "\nDo you want to copy themes for sddm ?" "" 8 60; then
+    # Ensure dependencies exist
+    isrsync
+    ishyprdot || return 1
+    # Variables
+    local sddmconf_dir="/etc/sddm.conf.d"
+    local sugarcandy_dir="/usr/share/sddm/themes/sugar-candy"
+
+    if command -v sddm &>/dev/null; then
+      # Create folders if necessary
+      sudo mkdir $sddmconf_dir
+      sudo mkdir -p $sugarcandy_dir
+      # Set the theme as default
+      printf "%s\n" "[Theme]" "Current=sugar-candy" | sudo tee $sddmconf_dir/10-theme.conf >/dev/null
+      # Apply sddm configuration
+      sudo rsync -avh hypr-dot/sddm/sddm.conf "$sddmconf_dir/sddm.conf" --delete
+      # Install sddm - sugar candy theme
+      sudo tar -xzvf $clonedir/sddm/sugar-candy/sugar-candy.tar.gz -C /usr/share/sddm/themes
+      sudo rsync -avh hypr-dot/sddm/sugar-candy/theme.conf "$sugarcandy_dir/theme.conf"
+      message "\nSddm theme installed successfully." "" 8 60
+    else
+      message "Sddm not installed. \nFirstly install sddm!" "" 10 60
+    fi
+  fi
+}
+
+install_wallpapers() {
+  # Variable
+  local wallpaperdir="$(xdg-user-dir PICTURES)"
+
+  if confirm "\nDo do you want to copy wallpapers to $wallpaperdir ?" "" 8 60; then
+    clear
+    #if wallpapers folder exist - copy only
+    if [[ ! -d "$wallpaperdir" ]]; then
+      git clone https://github.com/drpars/Wallpaper.git $wallpaperdir
+    else
+      # processing with preview
+      git clone https://github.com/drpars/Wallpaper.git
+      echo "\nPreviewing all changes:"
+      rsync -avh --dry-run "Wallpaper/" "$wallpaperdir/Wallpaper" --delete
+      if confirm "Apply these changes for wallpapers?"; then
+        echo -e "\nInstalling wallpapers..."
+        rsync -avh "Wallpaper/" "$wallpaperdir/Wallpaper"
+      else
+        echo -e "\nInstallation canceled"
+      fi
+
+    fi
+    message "Wallpapers are copied to $wallpaperdir ."
   fi
 }
 
@@ -1976,6 +2277,17 @@ shutdownmenu() {
   fi
 }
 
+loadglobalscope() {
+  # Dependencies
+  if ! command -v xdg-user-dir &>/dev/null; then
+    instpkg "xdg-user-dir" ""
+  fi
+
+  # Global variables
+  scriptdir=$(pwd)
+  localuser="$(whoami)"
+}
+
 if [[ ! $(id -u) -eq 0 ]]; then
   echo "Arch Linux Installation is starting ..."
   sudo pacman -S --needed dialog neovim
@@ -1998,9 +2310,12 @@ if [[ ! $(id -u) -eq 0 ]]; then
   if cpumodel "intel"; then
     cputype="intel"
   fi
-  scriptdir=$(pwd)
-  localuser="$(whoami)"
+
+  # Execute the script
+  loadglobalscope
   mainmenu
+
+  # Clean after installation is complete.
   rm -rf $scriptdir/hypr-dot
   rm $scriptdir/colors
   clear
