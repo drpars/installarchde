@@ -653,6 +653,7 @@ sounddriver() {
     "pipewire-zeroconf" "" on
     "pipewire-x11-bell" "" off
     "easyeffects" "" off
+    "jamesdsp-pipewire-bin" "(AUR)" on
   )
 
   # Display the menu and get user selections
@@ -663,8 +664,10 @@ sounddriver() {
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      # aurpkg="$aurpkg $item"
-      pkg="$pkg $item"
+      case $item in
+      "jamesdsp-pipewire-bin") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
+      esac
     done
 
     # Install selected packages
@@ -2315,7 +2318,7 @@ if [[ ! $(id -u) -eq 0 ]]; then
   loadglobalscope
   mainmenu
 
-  # Clean after installation is complete.
+  # Clean after installation complete.
   rm -rf $scriptdir/hypr-dot
   rm $scriptdir/colors
   clear
