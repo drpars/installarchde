@@ -1,52 +1,25 @@
 #!/bin/bash
 
-# Exit on error
-# set -e
+# --------------------------
+# Necessary Functions
+# --------------------------
+confirm() {
+  local prompt="$1"
+  local title="${2:-Confirmation}" # Default title is "Confirmation"
+  local height="${3:-0}"           # Default height
+  local width="${4:-0}"            # Default width
 
-apptitle="Arch Linux DE & Apps Installation"
-
-# Display the main menu
-mainmenu() {
-  local nextitem="${1:-.}" # Default to "." if no argument is provided
-  local options=(
-    "Update" ""
-    "Install" ""
-    "Config" ""
-    "Shutdown" ""
-  )
-
-  local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Main Menu" --default-item "${nextitem}" --cancel-button "Exit" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-
-  if [[ "$?" -eq "0" ]]; then
-    case ${sel} in
-    "Update")
-      updatemenu
-      nextitem="Install"
-      ;;
-    "Install")
-      installmenu
-      nextitem="Config"
-      ;;
-    "Config")
-      configmenu
-      nextitem="Shutdown"
-      ;;
-    "Shutdown")
-      shutdownmenu
-      nextitem="Shutdown"
-      ;;
-    esac
-
-    # Recursively call main menu with the next item
-    mainmenu "${nextitem}"
-  fi
+  dialog --backtitle "$apptitle" --title "$title" --yesno "$prompt" "$height" "$width"
+  return $?
 }
 
-resetvalue() {
-  for arg; do
-    unset ${arg}
-  done
+message() {
+  local text="$1"
+  local title="${2:-Message}" # Default title is "Message"
+  local height="${3:-0}"      # Default height
+  local width="${4:-0}"       # Default width
+
+  dialog --backtitle "$apptitle" --title "$title" --msgbox "$text" "$height" "$width"
 }
 
 cpumodel() {
@@ -69,29 +42,16 @@ gpumodel() {
   fi
 }
 
-confirm() {
-  local prompt="$1"
-  local title="${2:-Confirmation}" # Default title is "Confirmation"
-  local height="${3:-0}"           # Default height
-  local width="${4:-0}"            # Default width
-
-  dialog --backtitle "$apptitle" --title "$title" --yesno "$prompt" "$height" "$width"
-  return $?
-}
-
-message() {
-  local text="$1"
-  local title="${2:-Message}" # Default title is "Message"
-  local height="${3:-0}"      # Default height
-  local width="${4:-0}"       # Default width
-
-  dialog --backtitle "$apptitle" --title "$title" --msgbox "$text" "$height" "$width"
-}
-
 # Function to wait for user input
 pressanykey() {
   read -n1 -r -p "Press any key to continue..."
   echo
+}
+
+resetvalue() {
+  for arg; do
+    unset ${arg}
+  done
 }
 
 # Function to install packages
@@ -188,15 +148,127 @@ servicedisable() {
   fi
 }
 
+# symlink_sync "/path/to/source" "/path/to/target"
+symlink_sync() {
+  local anysource="$1"
+  local anytarget="$2"
+
+  # Resolve absolute paths
+  local abs_source=$(realpath -e "$anysource")
+  local abs_target_parent=$(dirname "$(realpath -m "$anytarget")")
+
+  # Create parent directories if needed
+  mkdir -p "$abs_target_parent"
+
+  # Create relative symlink (recommended for portability)
+  local relative_path=$(realpath --relative-to="$abs_target_parent" "$abs_source")
+
+  ln -svfn "$relative_path" "$anytarget"
+}
+
+# symlink_sync_recursive "/path/to/source_dir" "/path/to/target_dir"
+symlink_sync_recursive() {
+  local source_root="$1"
+  local target_root="$2"
+
+  while IFS= read -r -d $'\0' item; do
+    local relative_path="${item#$source_root/}"
+    symlink_sync "$item" "$target_root/$relative_path"
+  done < <(find "$source_root" -mindepth 1 -print0)
+}
+
 # Function to clone the hypr-dot repository if it doesn't exist
 ishyprdot() {
   if [[ ! -d hypr-dot ]]; then
     clear
-    echo "Cloning hypr-dot repository temporaryly..."
+    echo "Cloning hypr-dot repository temporarily..."
     git clone https://github.com/drpars/hypr-dot.git
   else
     echo "hypr-dot repository already exists."
   fi
+}
+
+# Usage:
+# clone_repo "Repo name"
+# clone_repo "Repo name" "Custom directory"
+clone_repo() {
+  local repo_name="$1"
+  local target_dir="${2:-$script_dir/$repo_name}"
+  local repo_url="https://github.com/drpars/$repo_name.git"
+
+  clear
+
+  # Validate repository name
+  if [[ -z "$repo_name" ]]; then
+    echo "❌ Error: Repository name not specified!" >&2
+    pressanykey
+    return 1
+  fi
+
+  # Validate repository name format
+  if [[ ! "$repo_name" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+    echo "❌ Error: Invalid repository name format!" >&2
+    echo "   Only letters, numbers, and ._- are allowed." >&2
+    pressanykey
+    return 1
+  fi
+
+  # Visual header
+  echo "┌─────────────────────────────────────────────────────────────┐"
+  echo "│󰄬  Cloning repository: $repo_name"
+  echo "├─────────────────────────────────────────────────────────────┤"
+  echo "│ Target directory: $target_dir"
+  echo "└─────────────────────────────────────────────────────────────┘"
+  echo
+
+  # Directory safety checks
+  if [[ -d "$target_dir" ]]; then
+    # Critical protection: Prevent script directory deletion
+    if [[ "$(realpath "$target_dir")" == "$(realpath "$script_dir")" ]]; then
+      echo "❌ Critical Error: Cannot clone into script's own directory!"
+      pressanykey
+      return 1
+    fi
+
+    # Handle non-empty directory
+    if [[ -n "$(ls -A "$target_dir")" ]]; then
+      echo "Directory contains:"
+      command -v tree &>/dev/null && tree -L 1 "$target_dir" || ls -la "$target_dir"
+
+      if ! confirm "Overwrite existing files in directory?" "" 8 60; then
+        clear
+        echo "⟳  Operation canceled by user"
+        pressanykey
+        return 1
+      fi
+      clear
+
+      echo "🧹  Cleaning directory..."
+      if ! rm -rf "${target_dir:?}"; then
+        echo "❌ Failed to clean directory!"
+        pressanykey
+        return 1
+      fi
+    fi
+  fi
+
+  # Clone operation
+  echo "🚀  Starting clone operation..."
+  if git clone --progress "$repo_url" "$target_dir"; then
+    echo -e "\n✅  Success: Repository cloned to $target_dir"
+    echo "📂  Cloned contents:"
+    command -v tree &>/dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
+  else
+    echo -e "\n❌  Critical Error: Clone failed (Exit code: $?)" >&2
+    echo "Possible reasons:" >&2
+    echo "1. Network issues or no internet connection" >&2
+    echo "2. Repository doesn't exist or is private" >&2
+    echo "3. Disk space or permission issues" >&2
+    pressanykey
+    return 1
+  fi
+
+  pressanykey
 }
 
 # Function to install rsync if it doesn't exist
@@ -208,10 +280,48 @@ isrsync() {
     pressanykey
   fi
 }
+# --------------------------
 
-# Function to display the updates menu
-updatemenu() {
+# Display the main menu
+mainmenu() {
   local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local options=(
+    "Update" ""
+    "Install" ""
+    "Config" ""
+    "Shutdown" ""
+  )
+
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "Main Menu" --default-item "${nextitem}" --cancel-button "Exit" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [[ "$?" -eq "0" ]]; then
+    case ${sel} in
+    "Update")
+      updatemenu
+      nextitem="Install"
+      ;;
+    "Install")
+      installmenu
+      nextitem="Config"
+      ;;
+    "Config")
+      configmenu
+      nextitem="Shutdown"
+      ;;
+    "Shutdown")
+      shutdownmenu
+      nextitem="Shutdown"
+      ;;
+    esac
+
+    # Recursively call main menu with the next item
+    mainmenu "${nextitem}"
+  fi
+}
+
+updatemenu() {
+  local nextitem="${1:-.}"
   local options=(
     "Install yay" ""
     "Install paru" ""
@@ -235,14 +345,13 @@ updatemenu() {
     )
   fi
 
-  # Display the menu
   local sel
   sel=$(dialog --backtitle "$apptitle" --title "Updates Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
     "Install yay")
-      if confirm "Do you want to install yay?\n"; then
+      if confirm "\nDo you want to install yay?" "" 8 60; then
         clear
         git clone https://aur.archlinux.org/yay-bin.git
         cd yay-bin || return
@@ -254,7 +363,7 @@ updatemenu() {
       nextitem="Install paru"
       ;;
     "Install paru")
-      if confirm "Do you want to install paru?\n"; then
+      if confirm "\nDo you want to install paru?" "" 8 60; then
         clear
         git clone https://aur.archlinux.org/paru.git
         cd paru || return
@@ -306,14 +415,12 @@ updatemenu() {
       ;;
     esac
 
-    # Recursively call updatemenu with the next item
     updatemenu "${nextitem}"
   fi
 }
 
-# Function to display the updates menu
 installmenu() {
-  local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local nextitem="${1:-.}"
   local options=(
     "Drivers" ""
     "Applications" ""
@@ -323,7 +430,6 @@ installmenu() {
     "Display Manager" ""
   )
 
-  # Display the menu
   local sel
   sel=$(dialog --backtitle "$apptitle" --title "Install Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
@@ -355,14 +461,12 @@ installmenu() {
       ;;
     esac
 
-    # Recursively call updatemenu with the next item
     installmenu "${nextitem}"
   fi
 }
 
-# Function to display the drivers menu
 driversmenu() {
-  local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local nextitem="${1:-.}"
   local options=(
     "Amd" ""
     "Nvidia" ""
@@ -386,36 +490,7 @@ driversmenu() {
       nextitem="Nvidia VA-API"
       ;;
     "Nvidia VA-API")
-      local options=(
-        "meson" "" on
-        "gst-plugins-bad" "" on
-        "ffnvcodec-headers" "" on
-      )
-
-      sel=$(dialog --backtitle "$apptitle" --title "NVIDIA VA-API dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-
-      if [[ "$?" -eq 0 ]]; then
-        local pkg="" aurpkg=""
-        for item in $sel; do
-          item=$(echo "$item" | tr -d '"')
-          # aurpkg="$aurpkg $item"
-          pkg="$pkg $item"
-        done
-
-        instpkg "$pkg" "$aurpkg"
-
-        if pacman -Qs ffnvcodec-headers &>/dev/null; then
-          clear
-          git clone https://github.com/elFarto/nvidia-vaapi-driver.git
-          cd nvidia-vaapi-driver || return
-          meson setup build
-          meson install -C build
-          cd ..
-          rm -rf nvidia-vaapi-driver
-          echo "nvidia-vaapi-driver is successfully installed"
-          pressanykey
-        fi
-      fi
+      nvidia_vaapi
       nextitem="Asus"
       ;;
     "Asus")
@@ -427,7 +502,7 @@ driversmenu() {
       nextitem="Mkinitcpio firmware"
       ;;
     "Mkinitcpio firmware")
-      if (confirm "Do you want to install firmware ? \n "); then
+      if confirm "\nDo you want to install firmware?" "" 8 60; then
         clear
         instpkg "" mkinitcpio-firmware
         pressanykey
@@ -436,7 +511,6 @@ driversmenu() {
       ;;
     esac
 
-    # Recursively call driversmenu with the next item
     driversmenu "${nextitem}"
   fi
 }
@@ -468,7 +542,7 @@ amddriver() {
     instpkg "$pkg" "$aurpkg"
 
     if pacman -Qs mesa &>/dev/null; then
-      if confirm "Do you want to apply necessary modules ? \n "; then
+      if confirm "\nDo you want to apply necessary modules?" "" 8 60; then
         clear
         configure_amd_modules
       fi
@@ -493,7 +567,7 @@ configure_amd_modules() {
     pressanykey
   fi
 
-  # Regenerate initramfs
+  # Regenerate kernel image
   sudo mkinitcpio -P
 }
 
@@ -525,7 +599,7 @@ nvidiadriver() {
     instpkg "$pkg" "$aurpkg"
 
     if pacman -Qs nvidia &>/dev/null; then
-      if confirm "Do you want to apply necessary modules ? \n "; then
+      if confirm "\nDo you want to apply necessary modules?" "" 8 60; then
         clear
         configure_nvidia_modules
       fi
@@ -551,7 +625,7 @@ configure_nvidia_modules() {
     pressanykey
   fi
 
-  # Regenerate initramfs
+  # Regenerate kernel image
   sudo mkinitcpio -P
 
   # Create /etc/modprobe.d/nvidia.conf if it doesn't exist
@@ -564,7 +638,7 @@ configure_nvidia_modules() {
   # Update /etc/kernel/cmdline
   if [[ -f /etc/kernel/cmdline ]]; then
     local presentkernelcmdline
-    presentkernelcmdline=$(cat /etc/kernel/cmdline)
+    presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
 
     if [[ -n "$presentkernelcmdline" ]]; then
       if ! echo "$presentkernelcmdline" | grep -q "$gpukernel"; then
@@ -575,6 +649,39 @@ configure_nvidia_modules() {
         echo "$gpukernel - Related modules already exist..."
         pressanykey
       fi
+    fi
+  fi
+}
+
+nvidia_vaapi() {
+  local options=(
+    "meson" "" on
+    "gst-plugins-bad" "" on
+    "ffnvcodec-headers" "" on
+  )
+
+  sel=$(dialog --backtitle "$apptitle" --title "NVIDIA VA-API dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
+    for item in $sel; do
+      item=$(echo "$item" | tr -d '"')
+      # aurpkg="$aurpkg $item"
+      pkg="$pkg $item"
+    done
+
+    instpkg "$pkg" "$aurpkg"
+
+    if pacman -Qs ffnvcodec-headers &>/dev/null; then
+      clear
+      git clone https://github.com/elFarto/nvidia-vaapi-driver.git
+      cd nvidia-vaapi-driver || return
+      meson setup build
+      meson install -C build
+      cd ..
+      rm -rf nvidia-vaapi-driver
+      echo "nvidia-vaapi-driver is successfully installed"
+      pressanykey
     fi
   fi
 }
@@ -606,7 +713,6 @@ asusdriver() {
     )
   fi
 
-  # Display the menu and get user selections
   local sel
   sel=$(dialog --backtitle "$apptitle" --title "Asus :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
@@ -614,7 +720,6 @@ asusdriver() {
     local pkg=""
     local aurpkg=""
 
-    # Process selected items
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       if $isg14repo; then
@@ -656,7 +761,6 @@ sounddriver() {
     "jamesdsp-pipewire-bin" "(AUR)" on
   )
 
-  # Display the menu and get user selections
   local sel
   sel=$(dialog --backtitle "$apptitle" --title "Sound :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
@@ -692,7 +796,6 @@ appmenu() {
     "Other" ""
   )
 
-  # Display the application menu
   local sel
   sel=$(dialog --backtitle "$apptitle" --title "Applications :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
@@ -748,7 +851,6 @@ appmenu() {
       ;;
     esac
 
-    # Recursively call appmenu with the next item
     appmenu "${nextitem}"
   fi
 }
@@ -820,6 +922,7 @@ programmingapps() {
     # Python
     "python" "" on
     "python-pip" "" on
+    "python-pipx" "" on
     "python-psutil" "" on
     "python-requests" "" on
     # others
@@ -907,8 +1010,9 @@ systemapps() {
 
 internetapps() {
   local options=(
-    "firefox" "" on
-    "thunderbird" "" on
+    "firefox" "" off
+    "thunderbird" "" off
+    "zen-browser-bin" "(AUR)" on
     "wget" "" off
     "uget" "" off
     "transmission-gtk" "" off
@@ -922,8 +1026,10 @@ internetapps() {
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      # aurpkg="$aurpkg $item"
-      pkg="$pkg $item"
+      case $item in
+      "zen-browser-bin") aurpkg="$aurpkg $item" ;;
+      *) pkg="$pkg $item" ;;
+      esac
     done
 
     # Install selected packages
@@ -945,6 +1051,7 @@ commonapps() {
     "libreoffice-fresh" "" off
     "libreoffice-still" "" off
     "waydroid" "(AUR)" on
+    "kate" "" on
     "mousepad" "" off
     "gnome-text-editor" "" off
     "bleachbit" "Profile cleaner" off
@@ -986,7 +1093,7 @@ commonapps() {
     # Handle Waydroid dependencies
     if [[ "${sel}" == *"waydroid"* ]]; then
       if ! pacman -Qs linux-zen &>/dev/null; then
-        if (confirm "Waydroid works best with linux-zen kernel.\nInstall binder_linux-dkms instead?\n"); then
+        if confirm "Waydroid works best with linux-zen kernel.\nInstall binder_linux-dkms instead?" "" 10 60; then
           configure_waydroid_settings
         fi
       fi
@@ -998,7 +1105,7 @@ configure_waydroid_settings() {
   local options=(
     "binder_linux-dkms" "(AUR)" on
     "python-pyclip" "(AUR)" on
-    "waydroid-settings-git" "(AUR)" on
+    "waydroid-settings-git" "(AUR)" off
   )
 
   local sel
@@ -1029,9 +1136,9 @@ configure_waydroid_settings() {
       echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
       sudo mkinitcpio -P
       serviceenable waydroid-container
-      message "Waydroid installed successfully.\nReboot before running!"
+      message "Waydroid installed successfully.\nReboot before running!" "" 8 60
     else
-      message "Binder modules already exist in kernel cmdline."
+      message "Binder modules already exist in kernel cmdline." "" 8 60
     fi
   fi
 }
@@ -1039,19 +1146,19 @@ configure_waydroid_settings() {
 filebrowsersapps() {
   local options
   options=(
-    "dolphin" "KDE" on
-    "dolphin-plugins" "KDE" on
-    "kdenetwork-filesharing" "KDE" on
-    "ffmpegthumbs" "KDE" on
     "archlinux-xdg-menu" "" on
-    "ark" "KDE" on
+    "yazi" "" on
+    "dolphin" "KDE" off
+    "dolphin-plugins" "KDE" off
+    "kdenetwork-filesharing" "KDE" off
+    "ffmpegthumbs" "KDE" off
+    "ark" "KDE" off
     "thunar" "XFCE" off
     "thunar-volman" "XFCE" off
     "thunar-archive-plugin" "XFCE" off
     "thunar-shares-plugin" "(AUR)" off
     "file-roller" "" off
-    "tumbler" "" on
-    "yazi" "" on
+    "tumbler" "" off
   )
 
   local sel
@@ -1210,9 +1317,8 @@ darkly_theme_dependencies() {
 
 gameapps() {
   local options=(
-    "steam" "" on
+    "steam" "" off
     "heroic-games-launcher-bin" "(AUR)" off
-    "suyu-bin" "(AUR)" off
   )
 
   local sel
@@ -1397,7 +1503,7 @@ themes() {
     "Tokyonight GTK theme")
       clear
       git clone https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git
-      instpkg "gtk-engine-murrine"
+      instpkg "gtk-engine-murrine" ""
       sh Tokyonight-GTK-Theme/themes/install.sh -l
       rm -rf Tokyonight-GTK-Theme
       pressanykey
@@ -1447,27 +1553,24 @@ hyprland() {
   local options=(
     "hyprland" "" on
     "hyprpaper" "" on
+    "hyprpicker" "" on
     "hypridle" "" on
     "hyprlock" "" on
     "hyprcursor" "" on
-    "hyprpicker" "(AUR)" on
+    "hyprpolkitagent" "" on
     "xdg-desktop-portal-hyprland" "" on
-    "xdg-desktop-portal-gtk" "" off
     "qt5-wayland" "" on
     "qt6-wayland" "" on
     "kitty" "" on
     "rofi-wayland" "" on
-    "polkit-kde-agent" "" on
-    "polkit-gnome" "" off
     "waybar" "" on
-    "waybar-updates" "(AUR)" on
+    "wleave-git" "(AUR)" off
     "wlogout" "(AUR)" on
-    "wlogout-git" "(AUR)" off
     "mako" "" on
     "libnotify" "" on
     "cliphist" "" on
     "swappy" "" on
-    "swww" "(AUR)" on
+    "swww" "" on
     "imv" "" on
     "grim" "" on
     "slurp" "" on
@@ -1475,9 +1578,9 @@ hyprland() {
     "playerctl" "" on
     "pamixer" "" on
     "pavucontrol" "" on
-    "iwgtk" "(AUR)" on
     "blueberry" "" on
-    "dconf" "" on
+    "iwdgui" "(AUR)" off
+    "iwgtk" "(AUR)" off
   )
 
   local sel
@@ -1488,7 +1591,7 @@ hyprland() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "hyprpicker" | "waybar-updates" | "wlogout" | "wlogout-git" | "swww" | "iwgtk")
+      "wleave-git" | "wlogout" | "iwdgui" | "iwgtk")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
@@ -1637,11 +1740,11 @@ displaymanager() {
   if [[ "$?" -eq 0 ]]; then
     case $sel in
     "gdm")
-      instpkg gdm
+      instpkg "gdm" ""
       serviceenable gdm
       ;;
     "sddm")
-      instpkg sddm
+      instpkg "sddm" ""
       serviceenable sddm
       ;;
     "sddm-git")
@@ -1649,15 +1752,15 @@ displaymanager() {
       serviceenable sddm
       ;;
     "lxdm")
-      instpkg lxdm
+      instpkg "lxdm" ""
       serviceenable lxdm
       ;;
     "lightdm-gtk-greeter")
-      instpkg lightdm-gtk-greeter
+      instpkg "lightdm-gtk-greeter" ""
       serviceenable lightdm
       ;;
     "lightdm-kde-greeter")
-      instpkg lightdm-kde-greeter
+      instpkg "lightdm-kde-greeter" ""
       serviceenable lightdm
       ;;
     esac
@@ -1949,7 +2052,7 @@ install_ohmyzsh() {
         # Install oh my zsh plugins
         git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
         git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-        sudo git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
+        git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
         # Apple spaceship theme
         ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
         message "\nOh my zsh is installed for "$localuser"." "" 8 60
@@ -1967,9 +2070,9 @@ install_ohmyzsh() {
           # Install oh my zsh plugins
           sudo git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
           sudo git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-          sudo git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
+          sudo git clone https://github.com/spaceship-prompt/spaceship-prompt.git /root/.oh-my-zsh/themes/spaceship-prompt --depth=1
           # Apple spaceship theme
-          sudo ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
+          sudo ln -s /root/.oh-my-zsh/themes/spaceship-prompt/spaceship.zsh-theme /root/.oh-my-zsh/themes/spaceship.zsh-theme
           message "\nOh my zsh is installed for //root." "" 8 60
         else
           message "\nOh my zsh is already installed for //root." "" 8 60
@@ -2282,18 +2385,13 @@ shutdownmenu() {
 
 loadglobalscope() {
   # Dependencies
-  if ! command -v xdg-user-dir &>/dev/null; then
-    instpkg "xdg-user-dir" ""
-  fi
+  for item in dialog neovim xdg-user-dir; do
+    if ! command -v $item &>/dev/null; then
+      sudo pacman -S --needed --noconfirm $item
+    fi
+  done
 
-  # Global variables
-  scriptdir=$(pwd)
-  localuser="$(whoami)"
-}
-
-if [[ ! $(id -u) -eq 0 ]]; then
-  echo "Arch Linux Installation is starting ..."
-  sudo pacman -S --needed dialog neovim
+  # Environments
   printf "%s\n" \
     "use_shadow = OFF" \
     "title_color = (BLACK,WHITE,OFF)" \
@@ -2306,22 +2404,39 @@ if [[ ! $(id -u) -eq 0 ]]; then
     "check_color = tag_color" \
     "check_selected_color = tag_selected_color" >colors
   export DIALOGRC="colors"
-  EDITOR=nvim
-  if cpumodel "amd"; then
-    cputype="amd"
-  fi
-  if cpumodel "intel"; then
-    cputype="intel"
-  fi
+  export EDITOR=nvim
 
+  # Global variables
+  apptitle="Arch Linux DE & Apps Installation"
+  localuser="$(whoami)"
+  script_dir="$(dirname "$(realpath "$0")")"
+}
+
+clean_installation() {
+  if [[ "$?" -eq 0 ]]; then
+    # Clean after installation complete.
+    # Folders
+    for item in hypr-dot Wallpaper; do
+      if [[ -d $script_dir/"$item" ]]; then
+        rm -rf $script_dir/"$item"
+      fi
+    done
+    # Files
+    if [[ -f $script_dir/colors ]]; then
+      rm $script_dir/colors
+    fi
+  fi
+}
+
+if [[ ! $(id -u) -eq 0 ]]; then
+  echo "Arch Linux Installation is starting ..."
+  # Exit on error
+  # set -e
   # Execute the script
   loadglobalscope
   mainmenu
-
-  # Clean after installation complete.
-  rm -rf $scriptdir/hypr-dot
-  rm $scriptdir/colors
-  clear
+  # Cleaning
+  clean_installation
 else
   echo "The script doesn't run as root (or under root user)."
   exit 1
