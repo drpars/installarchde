@@ -177,17 +177,6 @@ symlink_sync_recursive() {
   done < <(find "$source_root" -mindepth 1 -print0)
 }
 
-# Function to clone the hypr-dot repository if it doesn't exist
-ishyprdot() {
-  if [[ ! -d hypr-dot ]]; then
-    clear
-    echo "Cloning hypr-dot repository temporarily..."
-    git clone https://github.com/drpars/hypr-dot.git
-  else
-    echo "hypr-dot repository already exists."
-  fi
-}
-
 # Usage:
 # clone_repo "Repo name"
 # clone_repo "Repo name" "Custom directory"
@@ -225,7 +214,7 @@ clone_repo() {
   if [[ -d "$target_dir" ]]; then
     # Critical protection: Prevent script directory deletion
     if [[ "$(realpath "$target_dir")" == "$(realpath "$script_dir")" ]]; then
-      echo "❌ Critical Error: Cannot clone into script's own directory!"
+      echo "❌  Critical Error: Cannot clone into script's own directory!"
       pressanykey
       return 1
     fi
@@ -245,7 +234,7 @@ clone_repo() {
 
       echo "🧹  Cleaning directory..."
       if ! rm -rf "${target_dir:?}"; then
-        echo "❌ Failed to clean directory!"
+        echo "❌  Failed to clean directory!"
         pressanykey
         return 1
       fi
@@ -2030,7 +2019,7 @@ neovim_dot() {
   if confirm "\nDo you want to install neovim dotfiles for "$localuser" ?" "" 8 60; then
     clear
 
-    git clone https://github.com/drpars/nvim.git /home/"$localuser"/.config/nvim
+    clone_repo "nvim" /home/"$localuser"/.config/nvim
     message "\nNeovim dotfiles are installed." "" 8 40
 
     if confirm "\nAlso, do you want to install NeoVim dotfiles for root." "" 8 60; then
@@ -2091,7 +2080,7 @@ install_ohmyzsh() {
 dotfiles_selective() {
   # Ensure dependencies exist
   isrsync
-  ishyprdot || return 1
+  clone_repo "hypr-dot" || return 1
 
   # Verify config directory exists
   if [[ ! -d "hypr-dot/config" ]]; then
@@ -2285,7 +2274,7 @@ install_fonts() {
   if confirm "\nDo you want to install fonts?" "" 8 40; then
     # Ensure dependencies are exist
     isrsync
-    ishyprdot || return 1
+    clone_repo "hypr-dot" || return 1
 
     # Bulk processing with preview
     clear
@@ -2309,7 +2298,7 @@ install_sddmtheme() {
   if confirm "\nDo you want to copy themes for sddm ?" "" 8 60; then
     # Ensure dependencies exist
     isrsync
-    ishyprdot || return 1
+    clone_repo "hypr-dot" || return 1
     # Variables
     local sddmconf_dir="/etc/sddm.conf.d"
     local sugarcandy_dir="/usr/share/sddm/themes/sugar-candy"
@@ -2340,10 +2329,10 @@ install_wallpapers() {
     clear
     #if wallpapers folder exist - copy only
     if [[ ! -d "$wallpaperdir" ]]; then
-      git clone https://github.com/drpars/Wallpaper.git $wallpaperdir
+      clone_repo "Wallpaper" "$wallpaperdir"
     else
       # processing with preview
-      git clone https://github.com/drpars/Wallpaper.git
+      clone_repo "Wallpaper"
       echo "\nPreviewing all changes:"
       rsync -avh --dry-run "Wallpaper/" "$wallpaperdir/Wallpaper" --delete
       if confirm "Apply these changes for wallpapers?"; then
@@ -2384,62 +2373,97 @@ shutdownmenu() {
 }
 
 loadglobalscope() {
-  # Dependencies
-  for item in dialog neovim xdg-user-dir; do
-    if ! command -v $item &>/dev/null; then
-      sudo pacman -S --needed --noconfirm $item
+  # Package dependencies with explicit array
+  local packages=(
+    dialog
+    neovim
+    xdg-user-dirs
+    tree
+  )
+
+  # Install missing dependencies
+  local missing_pkgs=()
+  for pkg in "${packages[@]}"; do
+    if ! pacman -Qe "${pkg}" &>/dev/null; then
+      missing_pkgs+=("$pkg")
     fi
   done
 
-  # Environments
-  printf "%s\n" \
-    "use_shadow = OFF" \
-    "title_color = (BLACK,WHITE,OFF)" \
-    "button_label_active_color = (WHITE,BLUE,ON)" \
-    "button_label_inactive_color = (BLACK,WHITE,OFF)" \
-    "tag_color = (BLACK,WHITE,OFF)" \
-    "tag_selected_color = (WHITE,BLUE,ON)" \
-    "tag_key_color = (BLACK,WHITE,OFF)" \
-    "tag_key_selected_color = (WHITE,BLUE,ON)" \
-    "check_color = tag_color" \
-    "check_selected_color = tag_selected_color" >colors
-  export DIALOGRC="colors"
+  if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
+    echo "Installing missing dependencies: ${missing_pkgs[*]}"
+    sudo pacman -S --needed --noconfirm "${missing_pkgs[@]}" || {
+      echo "Failed to install dependencies!" >&2
+      return 1
+    }
+  fi
+
+  # Environment configuration
+  local color_config="colors"
+  cat > "${color_config}" <<'EOF'
+use_shadow = OFF
+title_color = (BLACK,WHITE,OFF)
+button_label_active_color = (WHITE,BLUE,ON)
+button_label_inactive_color = (BLACK,WHITE,OFF)
+tag_color = (BLACK,WHITE,OFF)
+tag_selected_color = (WHITE,BLUE,ON)
+tag_key_color = (BLACK,WHITE,OFF)
+tag_key_selected_color = (WHITE,BLUE,ON)
+check_color = tag_color
+check_selected_color = tag_selected_color
+EOF
+
+  export DIALOGRC="${color_config}"
   export EDITOR=nvim
 
   # Global variables
-  apptitle="Arch Linux DE & Apps Installation"
-  localuser="$(whoami)"
-  script_dir="$(dirname "$(realpath "$0")")"
+  declare -g apptitle="Arch Linux DE & Apps Installation"
+  declare -g localuser="$(whoami)"
+  declare -g script_dir="$(dirname "$(realpath "$0")")"
 }
 
 clean_installation() {
-  if [[ "$?" -eq 0 ]]; then
-    # Clean after installation complete.
-    # Folders
-    for item in hypr-dot Wallpaper; do
-      if [[ -d $script_dir/"$item" ]]; then
-        rm -rf $script_dir/"$item"
-      fi
-    done
-    # Files
-    if [[ -f $script_dir/colors ]]; then
-      rm $script_dir/colors
+  # Always clean regardless of exit status
+  local to_remove=(
+    "hypr-dot"
+    "dotfiles"
+    "Wallpaper"
+    "colors"
+  )
+
+  echo "Cleaning installation files..."
+  for item in "${to_remove[@]}"; do
+    local path="${script_dir:?}/$item"
+    if [[ -d "$path" ]]; then
+      rm -rf "${path}"
+    elif [[ -f "$path" ]]; then
+      rm -f "${path}"
     fi
-  fi
+  done
 }
 
-if [[ ! $(id -u) -eq 0 ]]; then
-  echo "Arch Linux Installation is starting ..."
-  # Exit on error
-  # set -e
-  # Execute the script
-  loadglobalscope
-  mainmenu
-  # Cleaning
-  clean_installation
-else
-  echo "The script doesn't run as root (or under root user)."
-  exit 1
-fi
+start() {
+  # Prevent running as root
+  if [[ $(id -u) -eq 0 ]]; then
+    echo "Error: This script should not be run as root!" >&2
+    return 1
+  fi
 
-exit 0
+  if [[ -z "$1" ]]; then
+    echo "Arch Linux Installation is starting..."
+    loadglobalscope || return 1
+    mainmenu
+  else
+    echo "Arch Linux Installation - Function Mode"
+    if declare -f "$1" >/dev/null; then
+      loadglobalscope || return 1
+      "$@"  # Proper argument handling
+    else
+      echo "Error: Function '$1' not found" >&2
+      return 1
+    fi
+  fi
+
+  clean_installation
+}
+
+start "$@"
