@@ -228,9 +228,9 @@ clone_repo() {
         clear
         echo "⟳  Operation canceled by user"
         pressanykey
-        return 1
+        # return 1
       fi
-      clear
+      # clear
 
       echo "🧹  Cleaning directory..."
       if ! rm -rf "${target_dir:?}"; then
@@ -1950,14 +1950,12 @@ network_config() {
 dotfilesmenu() {
   local nextitem="${1:-.}"
   local options=(
+    "Manage Dotfiles" ""
     "Neovim" ""
-    "Oh my zsh" "With spaceship"
-    "All Dotfiles" ""
     "Fonts" ""
     "Sddm theme" "Sugar-Candy"
     "Wallpapers" ""
     "Remove neovim dotfiles" ""
-    "Remove oh my zsh" ""
   )
 
   local sel
@@ -1965,16 +1963,12 @@ dotfilesmenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
+    "Manage Dotfiles")
+      manage_dotfiles
+      nextitem="Neovim"
+      ;;
     "Neovim")
       neovim_dot
-      nextitem="Oh my zsh"
-      ;;
-    "Oh my zsh")
-      install_ohmyzsh
-      nextitem="All Dotfiles"
-      ;;
-    "All Dotfiles")
-      dotfiles_selective
       nextitem="Fonts"
       ;;
     "Fonts")
@@ -1996,16 +1990,6 @@ dotfilesmenu() {
         rm -rf /home/$localuser/.cache/nvim
         if [[ "$?" -eq 0 ]]; then
           message "\nNvim dotfiles are completely removed." "" 8 60
-        fi
-      fi
-      nextitem="Remove oh my zsh"
-      ;;
-    "Remove oh my zsh")
-      if confirm "\nDo you want to remove oh my zsh?" "" 8 60; then
-        rm -rf /home/$localuser/.oh-my-zsh
-        sudo rm -rf /root/.oh-my-zsh
-        if [[ "$?" -eq 0 ]]; then
-          message "\nOh my zsh completely removed." "" 8 60
         fi
       fi
       nextitem="Remove neovim dotfiles"
@@ -2030,151 +2014,140 @@ neovim_dot() {
   fi
 }
 
-install_ohmyzsh() {
-  if confirm "\nDo you want to install oh my zsh for "$localuser" ?" "" 8 60; then
-    if command -v zsh &>/dev//null; then
-      if [[ ! -d /home/$localuser/.ohmyzsh ]]; then
-        clear
+manage_dotfiles() {
+  # --------------------------
+  # Helper Functions
+  # --------------------------
+  validate_symlinks() {
+    local target_dir="$1"
+    local broken_links=()
+    local exit_code=0 # Default success
 
-        # Local User - Install oh my zsh
-        echo -e "n" | sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-        # Install oh my zsh plugins
-        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-        git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-        git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
-        # Apple spaceship theme
-        ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
-        message "\nOh my zsh is installed for "$localuser"." "" 8 60
-      else
-        message "\nOh my zsh is already installed for "$localuser"." "" 8 60
+    echo "Validating symlinks in: $target_dir"
+
+    while IFS= read -r -d $'\0' link; do
+      if [[ ! -e "$(readlink -f "$link")" ]]; then
+        broken_links+=("$link → $(readlink "$link")")
+        exit_code=1 # Flag issues but continue processing
       fi
+    done < <(find "$target_dir" -type l -exec test ! -e {} \; -print0)
 
-      # RootUser
-      if confirm "\nDo you want to install also for root ?" "" 8 60; then
-        if [[ ! -d /root/.ohmyzsh ]]; then
-          clear
-
-          # Install oh my zsh - RootUser
-          sudo echo -e "n" | sudo sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-          # Install oh my zsh plugins
-          sudo git clone https://github.com/zsh-users/zsh-syntax-highlighting.git /root/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
-          sudo git clone https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions
-          sudo git clone https://github.com/spaceship-prompt/spaceship-prompt.git /root/.oh-my-zsh/themes/spaceship-prompt --depth=1
-          # Apple spaceship theme
-          sudo ln -s /root/.oh-my-zsh/themes/spaceship-prompt/spaceship.zsh-theme /root/.oh-my-zsh/themes/spaceship.zsh-theme
-          message "\nOh my zsh is installed for //root." "" 8 60
-        else
-          message "\nOh my zsh is already installed for //root." "" 8 60
-        fi
-      fi
-      pressanykey
+    # Display results without exiting
+    if [[ ${#broken_links[@]} -gt 0 ]]; then
+      echo -e "\n❌ Found broken symlinks:"
+      printf '  - %s\n' "${broken_links[@]}"
     else
-      if confirm "\nzsh not detected. \nDo you want to install zsh ?" "" 10 60; then
-        install "zsh" ""
-        message "\nzsh is installed." "" 8 40
+      echo -e "\n✅ All symlinks are valid"
+    fi
+
+    return $exit_code # Report status without aborting
+  }
+
+  atomic_symlink() {
+    local source="$1"
+    local target="$2"
+    local temp_target="${target}.newlink"
+
+    # Create temporary link first
+    if ln -sfn "$source" "$temp_target"; then
+      # Atomically replace target
+      if mv -f "$temp_target" "$target"; then
+        echo "Created: $target → $source"
+        return 0
       fi
     fi
-  fi
-}
 
-dotfiles_selective() {
+    echo "Failed to create symlink: $target" >&2
+    rm -f "$temp_target"
+    return 1
+  }
+
+  # --------------------------
+  # Main Function Logic
+  # --------------------------
   # Ensure dependencies exist
   isrsync
-  clone_repo "hypr-dot" || return 1
+  clone_repo "dotfiles" || return 1
 
-  # Verify config directory exists
-  if [[ ! -d "hypr-dot/config" ]]; then
-    clear
-    echo "Error: hypr-dot/config directory not found" >&2
-    pressanykey
+  # Copy cloned repo to known location and validate
+  local dotfiles_root="${HOME}/.dotfiles"
+
+  # Sync to target location
+  if ! rsync -a --delete "${script_dir}/dotfiles/" "${dotfiles_root}/"; then
+    echo "Error: Failed to sync dotfiles to ${dotfiles_root}" >&2
     return 1
   fi
 
-  # --------------------------
-  # Part 1: .config Files
-  # --------------------------
-  local options=()
-  while IFS= read -r -d $'\0' item; do
-    local clean_name=$(basename "$item")
-    options+=("$clean_name" "" off)
-  done < <(find hypr-dot/config -mindepth 1 -maxdepth 1 \( -type d -o -type f \) -print0 | sort -zV)
-
-  if [[ ${#options[@]} -eq 0 ]]; then
-    clear
-    echo "No dotfiles found in hypr-dot/config" >&2
-    pressanykey
-    return 0
-  fi
-
-  # Show selection dialog
-  local sel
-  sel=$(dialog --backtitle "$apptitle" \
-    --title "Select Dotfiles to Install" \
-    --cancel-button "Back" \
-    --checklist "Choose configurations to sync:" \
-    0 40 0 \
-    "${options[@]}" \
-    3>&1 1>&2 2>&3)
-  local dialog_ret=$?
-  clear
-
-  [[ $dialog_ret -ne 0 ]] && return 1
+  # Validate directory structure
+  local required_dirs=("config" "home")
+  for dir in "${required_dirs[@]}"; do
+    if [[ ! -d "${dotfiles_root}/${dir}" ]]; then
+      echo "Error: Missing required directory '${dir}' in ${dotfiles_root}" >&2
+      return 1
+    fi
+  done
 
   # --------------------------
-  # Installation Logic
+  # Configuration Selection
   # --------------------------
-  if [[ -n "$sel" ]]; then
-    local backup_dir="$HOME/.config-backup-$(date +%Y%m%d-%H%M%S)"
-    mkdir -p "$backup_dir"
+  show_selection_dialog() {
+    local title="$1"
+    local path="$2"
 
-    # Initial confirmation dialog
-    response=$(dialog --backtitle "$apptitle" \
-      --title "Confirmation" \
-      --menu "This will OVERWRITE existing configs. Choose action:" \
-      0 60 0 \
-      "Yes" "Individual confirmations" \
-      "YesAll" "Apply all changes" \
-      "No" "Cancel installation" \
+    local options=()
+    while IFS= read -r -d $'\0' item; do
+      local clean_name="${item##*/}"
+      options+=("$clean_name" "Configuration for $clean_name" off)
+    done < <(find "$path" -mindepth 1 -maxdepth 1 \( -type d -o -type f \) -print0 | sort -zV)
+
+    [[ ${#options[@]} -eq 0 ]] && return 1
+
+    local sel
+    sel=$(dialog --backtitle "$apptitle" \
+      --title "$title" \
+      --cancel-button "Back" \
+      --checklist "Choose items to sync:" \
+      0 0 0 \
+      "${options[@]}" \
       3>&1 1>&2 2>&3)
-    clear
 
-    [[ $? -ne 0 ]] && response="No"
+    echo "$sel"
+  }
+
+  # --------------------------
+  # Installation Processor
+  # --------------------------
+  process_installation() {
+    local section="$1"     # "config" or "home"
+    local target_base="$2" # "$HOME/.config" or "$HOME"
+    shift 2
+
+    # Selection dialog
+    local sel=$(show_selection_dialog "Select ${section^} Files" "${dotfiles_root}/${section}") || return 1
+    [[ -z "$sel" ]] && return 0
+
+    # Action selection
+    local response=$(dialog --backtitle "$apptitle" \
+      --title "Confirmation" \
+      --menu "Choose sync method:" \
+      0 0 0 \
+      "Copy" "Direct copy with backups" \
+      "Symlink" "Create symbolic links" \
+      "Validate" "Check existing links" \
+      "Cancel" "Abort operation" \
+      3>&1 1>&2 2>&3) || return 1
 
     case $response in
-    "Yes")
-      # Individual confirmations
-      for item in $sel; do
-        local item=$(echo "$item" | tr -d '"')
-        local source="hypr-dot/config/$item"
-        local target="$HOME/.config/$item"
+    "Copy")
+      local backup_dir="${target_base}-backup-$(date +%Y%m%d-%H%M%S)"
+      mkdir -p "$backup_dir"
 
-        echo -e "Previewing changes for: $item"
-        if [[ -d "$source" ]]; then
-          rsync -avh --dry-run "$source/" "$target/" --delete
-        else
-          rsync -avh --dry-run "$source" "$target" --delete
-        fi
-        pressanykey
-
-        if confirm "Apply these changes for $item?"; then
-          clear
-          echo -e "Applying changes for: $item"
-          [[ -d "$source" ]] && rsync -avh --backup --backup-dir="$backup_dir" "$source/" "$target/" --delete ||
-            rsync -avh --backup --backup-dir="$backup_dir" "$source" "$target" --delete
-          echo -e "Done!"
-          pressanykey
-        fi
-        clear
-      done
-      ;;
-
-    "YesAll")
       clear
       echo -e "Previewing ALL changes:\n"
       for item in $sel; do
         local item=$(echo "$item" | tr -d '"')
-        local source="hypr-dot/config/$item"
-        local target="$HOME/.config/$item"
+        local source="${dotfiles_root}/${section}/${item}"
+        local target="${target_base}/${item}"
 
         echo -e "─── $item ───"
         [[ -d "$source" ]] && rsync -avh --dry-run "$source/" "$target/" --delete ||
@@ -2187,8 +2160,8 @@ dotfiles_selective() {
         clear
         for item in $sel; do
           local item=$(echo "$item" | tr -d '"')
-          local source="hypr-dot/config/$item"
-          local target="$HOME/.config/$item"
+          local source="${dotfiles_root}/${section}/${item}"
+          local target="${target_base}/${item}"
 
           echo -e "Installing: $item"
           [[ -d "$source" ]] && rsync -avh --backup --backup-dir="$backup_dir" "$source/" "$target/" --delete ||
@@ -2199,75 +2172,81 @@ dotfiles_selective() {
       fi
       ;;
 
-    *)
+    "Symlink")
+      local backup_dir="${target_base}-backup-$(date +%Y%m%d-%H%M%S)"
+      mkdir -p "$backup_dir"
+
       clear
-      echo -e "\n❌ Installation canceled"
+      for item in $sel; do
+        item=$(echo "$item" | tr -d '"')
+        local source="${dotfiles_root}/${section}/${item}"
+        local target="${target_base}/${item}"
+
+        # Backup existing
+        if [[ -e "$target" ]]; then
+          mv -f "$target" "${backup_dir}/" 2>/dev/null
+        fi
+
+        # Create parent directory
+        mkdir -p "$(dirname "$target")"
+
+        # Create atomic symlink
+        if ! atomic_symlink "$source" "$target"; then
+          echo "Failed to create symlink for: $item" >&2
+        fi
+      done
+
+      # Post-validation with continue
+      if validate_symlinks "$target_base"; then
+        echo "Success - all links valid"
+      else
+        read -p "Found broken links. Continue anyway? [y/N] " -n 1
+        [[ $REPLY =~ ^[Yy]$ ]] || return 1
+      fi
+
+      pressanykey # Always reaches here
+      return 0    # Explicit success return
+      ;;
+
+    "Validate")
+      # Post-validation with continue
+      if validate_symlinks "$target_base"; then
+        echo "Success - all links valid"
+      else
+        echo "Warning: Broken links detected" >&2
+      fi
       pressanykey
       ;;
+
+    *) return 1 ;;
     esac
-
-    # Backup report
-    clear
-    echo -e "\n󰅣 Backup stored in: $backup_dir"
-    [[ $(ls -A "$backup_dir") ]] || echo "No files needed backup (clean install)"
-    pressanykey
-  fi
+  }
 
   # --------------------------
-  # Part 2: $HOME Files
+  # Main Execution Flow
   # --------------------------
-  clear
-  local home_options=(
-    ".gitconfig" "Git configuration" off
-    ".gtk-2.0" "GTK 2.x configuration" off
-    ".zshrc" "Zsh shell configuration" off
-  )
+  while true; do
+    local choice=$(dialog --backtitle "$apptitle" \
+      --title "Main Dotfiles Menu" \
+      --menu "Choose configuration section:" \
+      0 0 0 \
+      "Config" "~/.config directory settings" \
+      "Home" "Home directory dotfiles" \
+      "Exit" "Return to main menu" \
+      3>&1 1>&2 2>&3) || return 1
 
-  local home_sel
-  home_sel=$(dialog --backtitle "$apptitle" \
-    --title "Select Home Dotfiles" \
-    --cancel-button "Back" \
-    --checklist "Choose home configurations:" \
-    0 60 0 \
-    "${home_options[@]}" \
-    3>&1 1>&2 2>&3)
-  clear
-
-  if [[ -n "$home_sel" ]]; then
-    local home_backup_dir="$HOME/home-backup-$(date +%Y%m%d-%H%M%S)"
-    mkdir -p "$home_backup_dir"
-
-    echo -e "Previewing home changes:\n"
-    for item in $home_sel; do
-      local item=$(echo "$item" | tr -d '"')
-      local source="hypr-dot/$item"
-      local target="$HOME/$item"
-
-      echo -e "─── $item ───"
-      rsync -avh --dry-run "$source" "$target" --delete
-      echo
-    done
-    pressanykey
-
-    if confirm "Apply ALL home directory changes?"; then
-      clear
-      for item in $home_sel; do
-        local item=$(echo "$item" | tr -d '"')
-        local source="hypr-dot/$item"
-        local target="$HOME/$item"
-
-        echo -e "Installing: $item"
-        rsync -avh --backup --backup-dir="$home_backup_dir" "$source" "$target" --delete
-        pressanykey
-        clear
-      done
-    fi
-
-    # Home backup report
-    clear
-    echo -e "\n󰅣 Home backups stored in: $home_backup_dir"
-    pressanykey
-  fi
+    case $choice in
+    "Config")
+      process_installation "config" "$HOME/.config"
+      ;;
+    "Home")
+      process_installation "home" "$HOME"
+      ;;
+    "Exit")
+      return 0
+      ;;
+    esac
+  done
 }
 
 install_fonts() {
@@ -2399,7 +2378,7 @@ loadglobalscope() {
 
   # Environment configuration
   local color_config="colors"
-  cat > "${color_config}" <<'EOF'
+  cat >"${color_config}" <<'EOF'
 use_shadow = OFF
 title_color = (BLACK,WHITE,OFF)
 button_label_active_color = (WHITE,BLUE,ON)
@@ -2456,7 +2435,7 @@ start() {
     echo "Arch Linux Installation - Function Mode"
     if declare -f "$1" >/dev/null; then
       loadglobalscope || return 1
-      "$@"  # Proper argument handling
+      "$@" # Proper argument handling
     else
       echo "Error: Function '$1' not found" >&2
       return 1
