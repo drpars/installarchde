@@ -1237,10 +1237,10 @@ themeengine() {
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
     "qt6ct" "" off
-    "qt5ct-kde" "(AUR)" on
-    "qt6ct-kde" "(AUR)" on
-    "darkly-qt5-git" "(AUR)" on
-    "darkly-qt6-git" "(AUR)" on
+    # "qt5ct-kde" "(AUR)" on
+    "qt6ct-kde" "(AUR)" off
+    "darkly-qt5-git" "(AUR)" off
+    "darkly-qt6-git" "(AUR)" off
   )
 
   local sel
@@ -1256,7 +1256,7 @@ themeengine() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "qt5ct-kde" | "qt6ct-kde" | "darkly-qt5-git" | "darkly-qt6-git")
+      "qt6ct-kde" | "darkly-qt5-git" | "darkly-qt6-git")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
@@ -1306,7 +1306,7 @@ darkly_theme_dependencies() {
       esac
     done
 
-    instpkg "$pkg" "aurpkg"
+    instpkg "$pkg" "$aurpkg"
   fi
 }
 
@@ -1364,7 +1364,7 @@ virt_manager() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" -1 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -1386,7 +1386,9 @@ virt_manager_configuration() {
   clear
 
   # Backup libvirtd.conf
-  sudo cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.bak
+  if [[ -f /etc/libvirt/libvirtd.conf ]]; then
+    sudo cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.bak
+  fi
   # Configure libvirtd.conf
   if ! grep -q "unix_sock_group = 'libvirt'" /etc/libvirt/libvirtd.conf; then
     printf "\nunix_sock_group = 'libvirt'\nunix_sock_rw_perms = '0770'\n" |
@@ -1894,7 +1896,9 @@ network_config() {
       clear
 
       # Backup samba config
-      sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
+      if [[ -f /etc/samba/smb.conf ]]; then
+        sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
+      fi
 
       # Create Samba configuration with safer defaults
       sudo mkdir -p /etc/samba # Ensure directory exists
@@ -1975,10 +1979,6 @@ dotfilesmenu() {
       ;;
     "Neovim")
       neovim_dot
-      nextitem="Fonts"
-      ;;
-    "Fonts")
-      install_fonts
       nextitem="Wallpapers"
       ;;
     "Wallpapers")
@@ -2255,80 +2255,78 @@ neovim_dot() {
   fi
 }
 
-install_fonts() {
-  if confirm "\nDo you want to install fonts?" "" 8 40; then
-    # Ensure dependencies are exist
-    isrsync
-    clone_repo "hypr-dot" || return 1
-
-    # Bulk processing with preview
-    clear
-    echo -e "\nPreviewing all changes:"
-    rsync -avh --dry-run "hypr-dot/.fonts/" "$HOME/.fonts/"
-    pressanykey
-
-    if confirm "Apply these changes for fonts?"; then
-      clear
-      echo -e "\nInstalling fonts..."
-      rsync -avh "hypr-dot/.fonts/" "$HOME/.fonts/"
-    else
-      echo -e "\nInstallation canceled"
-    fi
-
-    pressanykey
-  fi
-}
-
 install_sddmtheme() {
   if confirm "\nDo you want to copy themes for sddm ?" "" 8 60; then
     # Ensure dependencies exist
     isrsync
-    clone_repo "hypr-dot" || return 1
+    clone_repo "dotfiles" || return 1
+
     # Variables
     local sddmconf_dir="/etc/sddm.conf.d"
     local sugarcandy_dir="/usr/share/sddm/themes/sugar-candy"
+    local cloned_dotfiles_dir="$script_dir/dotfiles"  # Ensure $script_dir is defined in the script
 
     if command -v sddm &>/dev/null; then
-      # Create folders if necessary
-      sudo mkdir $sddmconf_dir
-      sudo mkdir -p $sugarcandy_dir
-      # Set the theme as default
-      printf "%s\n" "[Theme]" "Current=sugar-candy" | sudo tee $sddmconf_dir/10-theme.conf >/dev/null
-      # Apply sddm configuration
-      sudo rsync -avh hypr-dot/sddm/sddm.conf "$sddmconf_dir/sddm.conf" --delete
-      # Install sddm - sugar candy theme
-      sudo tar -xzvf $clonedir/sddm/sugar-candy/sugar-candy.tar.gz -C /usr/share/sddm/themes
-      sudo rsync -avh hypr-dot/sddm/sugar-candy/theme.conf "$sugarcandy_dir/theme.conf"
-      message "\nSddm theme installed successfully." "" 8 60
+      # Create configuration and theme directories safely
+      sudo mkdir -p "$sddmconf_dir"
+      sudo mkdir -p "$sugarcandy_dir"
+
+      # Configure SDDM to use sugar-candy theme
+      printf "%s\n" "[Theme]" "Current=sugar-candy" | sudo tee "$sddmconf_dir/10-theme.conf" >/dev/null
+
+      # Copy SDDM configuration file from cloned repo
+      if [[ -f "$cloned_dotfiles_dir/sddm/sddm.conf" ]]; then
+        sudo rsync -avh "$cloned_dotfiles_dir/sddm/sddm.conf" "$sddmconf_dir/sddm.conf" --delete
+      else
+        message "\nSDDM configuration file not found in cloned repository!" "Error" 8 60
+        return 1
+      fi
+
+      # Extract sugar-candy theme from tarball
+      local tarball_path="$cloned_dotfiles_dir/sddm/sugar-candy/sugar-candy.tar.gz"
+      if [[ -f "$tarball_path" ]]; then
+        sudo tar -xzvf "$tarball_path" -C "/usr/share/sddm/themes"
+        message "\nSDDM theme installed successfully." "Success" 8 60
+      else
+        message "\nSugar Candy theme tarball not found!" "Error" 8 60
+        return 1
+      fi
     else
-      message "Sddm not installed. \nFirstly install sddm!" "" 10 60
+      message "SDDM is not installed. Please install SDDM first." "Error" 10 60
+      return 1
     fi
   fi
 }
 
 install_wallpapers() {
-  # Variable
+  # Variables
   local wallpaperdir="$(xdg-user-dir PICTURES)"
+  local clone_dir="$script_dir/Wallpaper"
 
-  if confirm "\nDo do you want to copy wallpapers to $wallpaperdir ?" "" 8 60; then
-    clear
-    #if wallpapers folder exist - copy only
-    if [[ ! -d "$wallpaperdir" ]]; then
-      clone_repo "Wallpaper" "$wallpaperdir"
-    else
-      # processing with preview
-      clone_repo "Wallpaper"
-      echo "\nPreviewing all changes:"
-      rsync -avh --dry-run "Wallpaper/" "$wallpaperdir/Wallpaper" --delete
-      if confirm "Apply these changes for wallpapers?"; then
-        echo -e "\nInstalling wallpapers..."
-        rsync -avh "Wallpaper/" "$wallpaperdir/Wallpaper"
-      else
-        echo -e "\nInstallation canceled"
-      fi
-
+  if confirm "\nDo you want to copy wallpapers to:\n$wallpaperdir?" "Wallpaper Installation" 10 60; then
+    # Clone repository to temporary directory
+    if ! clone_repo "Wallpaper"; then
+      message "Failed to download wallpapers!" "Error" 8 60
+      return 1
     fi
-    message "Wallpapers are copied to $wallpaperdir ."
+
+    # Show changes preview
+    clear
+    echo "Previewing changes:"
+    rsync -avh --dry-run --itemize-changes "$clone_dir/" "$wallpaperdir" --delete
+    
+    if confirm "\nApply these wallpaper changes?\nFrom: $clone_dir\nTo: $wallpaperdir" "Confirm Sync" 12 70; then
+      clear
+      echo -e "\nCopying wallpapers..."
+      if rsync -avh --progress "$clone_dir/" "$wallpaperdir" --delete; then
+        message "Wallpapers successfully copied to:\n$wallpaperdir" "Success" 8 65
+      else
+        message "Failed to copy wallpapers!\nExit code: $?" "Error" 8 60
+        return 1
+      fi
+    else
+      message "Wallpaper installation canceled." "Canceled" 8 50
+    fi
   fi
 }
 
@@ -2409,7 +2407,6 @@ EOF
 clean_installation() {
   # Always clean regardless of exit status
   local to_remove=(
-    "hypr-dot"
     "dotfiles"
     "Wallpaper"
     "colors"
