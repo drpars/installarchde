@@ -1233,6 +1233,8 @@ multimediaapps() {
 
 themeengine() {
   local options=(
+    "lxappearance" "(GTK)" off
+    "nwg-look" "(GTK)" off
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
@@ -2264,7 +2266,7 @@ install_sddmtheme() {
     # Variables
     local sddmconf_dir="/etc/sddm.conf.d"
     local sugarcandy_dir="/usr/share/sddm/themes/sugar-candy"
-    local cloned_dotfiles_dir="$script_dir/dotfiles"  # Ensure $script_dir is defined in the script
+    local cloned_dotfiles_dir="$script_dir/dotfiles" # Ensure $script_dir is defined in the script
 
     if command -v sddm &>/dev/null; then
       # Create configuration and theme directories safely
@@ -2314,7 +2316,7 @@ install_wallpapers() {
     clear
     echo "Previewing changes:"
     rsync -avh --dry-run --itemize-changes "$clone_dir/" "$wallpaperdir" --delete
-    
+
     if confirm "\nApply these wallpaper changes?\nFrom: $clone_dir\nTo: $wallpaperdir" "Confirm Sync" 12 70; then
       clear
       echo -e "\nCopying wallpapers..."
