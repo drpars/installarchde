@@ -1182,6 +1182,7 @@ filebrowsersapps() {
         "fzf" "" on
         "zoxide" "" on
         "imagemagick" "" on
+        "perl-image-exiftool" "" on
       )
 
       sel=$(dialog --backtitle "$apptitle" --title "Yazi dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
