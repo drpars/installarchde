@@ -880,6 +880,11 @@ consoleapps() {
 
     # Install selected packages
     instpkg "$pkg" "$aurpkg"
+    
+    # Bat cache build
+    if command -v bat >/dev/null;then
+      bat cache --build >/dev/null
+    fi
   fi
 }
 
