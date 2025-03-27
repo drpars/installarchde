@@ -1865,7 +1865,7 @@ swap_file_config() {
   # mkinitcpio hooks configuration
   local mkinitfile="/etc/mkinitcpio.conf"
   if ! grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
-    sudo sed -i '/^HOOKS=/s/\(.*fsck.*\)/\1 resume/' "$mkinitfile"
+    sudo sed -i '/^HOOKS=(/ s/\<fsck\>/resume &/' "$mkinitfile"
     sudo mkinitcpio -P
   else
     echo "Resume hook already exists in mkinitcpio.conf"
