@@ -202,6 +202,26 @@ clone_repo() {
     return 1
   fi
 
+  clone_now() {
+    # Clone operation
+    echo "🚀  Starting clone operation..."
+    if git clone --progress "$repo_url" "$target_dir"; then
+      echo -e "\n✅  Success: Repository cloned to $target_dir"
+      echo "📂  Cloned contents:"
+      command -v tree &>/dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
+    else
+      echo -e "\n❌  Critical Error: Clone failed (Exit code: $?)" >&2
+      echo "Possible reasons:" >&2
+      echo "1. Network issues or no internet connection" >&2
+      echo "2. Repository doesn't exist or is private" >&2
+      echo "3. Disk space or permission issues" >&2
+      pressanykey
+      return 1
+    fi
+
+    pressanykey
+  }
+
   # Visual header
   echo "┌─────────────────────────────────────────────────────────────┐"
   echo "│󰄬  Cloning repository: $repo_name"
@@ -229,35 +249,24 @@ clone_repo() {
         echo "⟳  Operation canceled by user"
         pressanykey
         # return 1
+      else
+        clear
+        echo "🧹  Cleaning directory..."
+        if ! rm -rf "${target_dir:?}"; then
+          echo "❌  Failed to clean directory!"
+          pressanykey
+          return 1
+        fi
+        # Clone repository
+        clone_now
       fi
-      # clear
 
-      echo "🧹  Cleaning directory..."
-      if ! rm -rf "${target_dir:?}"; then
-        echo "❌  Failed to clean directory!"
-        pressanykey
-        return 1
-      fi
     fi
-  fi
-
-  # Clone operation
-  echo "🚀  Starting clone operation..."
-  if git clone --progress "$repo_url" "$target_dir"; then
-    echo -e "\n✅  Success: Repository cloned to $target_dir"
-    echo "📂  Cloned contents:"
-    command -v tree &>/dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
   else
-    echo -e "\n❌  Critical Error: Clone failed (Exit code: $?)" >&2
-    echo "Possible reasons:" >&2
-    echo "1. Network issues or no internet connection" >&2
-    echo "2. Repository doesn't exist or is private" >&2
-    echo "3. Disk space or permission issues" >&2
-    pressanykey
-    return 1
+    # Clone repository
+    clone_now
   fi
 
-  pressanykey
 }
 
 # Function to install rsync if it doesn't exist
@@ -880,9 +889,9 @@ consoleapps() {
 
     # Install selected packages
     instpkg "$pkg" "$aurpkg"
-    
+
     # Bat cache build
-    if command -v bat >/dev/null;then
+    if command -v bat >/dev/null; then
       bat cache --build >/dev/null
     fi
   fi
@@ -2067,20 +2076,12 @@ manage_dotfiles() {
   isrsync
   clone_repo "dotfiles" || return 1
 
-  # Copy cloned repo to known location and validate
-  local dotfiles_root="${HOME}/.dotfiles"
-
-  # Sync to target location
-  if ! rsync -a --delete "${script_dir}/dotfiles/" "${dotfiles_root}/"; then
-    echo "Error: Failed to sync dotfiles to ${dotfiles_root}" >&2
-    return 1
-  fi
-
   # Validate directory structure
   local required_dirs=("config" "home")
   for dir in "${required_dirs[@]}"; do
-    if [[ ! -d "${dotfiles_root}/${dir}" ]]; then
-      echo "Error: Missing required directory '${dir}' in ${dotfiles_root}" >&2
+    if [[ ! -d "${script_dir}/dotfiles/${dir}" ]]; then
+      echo "Error: Missing required directory '${dir}' in ${script_dir}/dotfiles"
+      pressanykey
       return 1
     fi
   done
@@ -2121,7 +2122,7 @@ manage_dotfiles() {
     shift 2
 
     # Selection dialog
-    local sel=$(show_selection_dialog "Select ${section^} Files" "${dotfiles_root}/${section}") || return 1
+    local sel=$(show_selection_dialog "Select ${section^} Files" "${script_dir}/dotfiles/${section}") || return 1
     [[ -z "$sel" ]] && return 0
 
     # Action selection
@@ -2144,7 +2145,7 @@ manage_dotfiles() {
       echo -e "Previewing ALL changes:\n"
       for item in $sel; do
         local item=$(echo "$item" | tr -d '"')
-        local source="${dotfiles_root}/${section}/${item}"
+        local source="${script_dir}/dotfiles/${section}/${item}"
         local target="${target_base}/${item}"
 
         echo -e "─── $item ───"
@@ -2158,7 +2159,7 @@ manage_dotfiles() {
         clear
         for item in $sel; do
           local item=$(echo "$item" | tr -d '"')
-          local source="${dotfiles_root}/${section}/${item}"
+          local source="${script_dir}/dotfiles/${section}/${item}"
           local target="${target_base}/${item}"
 
           echo -e "Installing: $item"
@@ -2171,13 +2172,23 @@ manage_dotfiles() {
       ;;
 
     "Symlink")
+      # Create backup dir
       local backup_dir="${target_base}-backup-$(date +%Y%m%d-%H%M%S)"
       mkdir -p "$backup_dir"
+
+      # Copy cloned repo to known location and validate
+      local dotfiles_root="${HOME}/.dotfiles"
+
+      # Sync to target location
+      if ! rsync -a --backup --backup-dir="$backup_dir" "${script_dir}/dotfiles/" "${dotfiles_root}/" --delete; then
+        echo "Error: Failed to sync dotfiles to ${dotfiles_root}" >&2
+        return 1
+      fi
 
       clear
       for item in $sel; do
         item=$(echo "$item" | tr -d '"')
-        local source="${dotfiles_root}/${section}/${item}"
+        local source="${script_dir}/dotfiles/${section}/${item}"
         local target="${target_base}/${item}"
 
         # Backup existing
