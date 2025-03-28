@@ -1743,6 +1743,7 @@ displaymanager() {
     "gdm" "Gnome Login"
     "sddm" "QT5 Login"
     "sddm-git" "(AUR)"
+    "regreet" ""
     "lxdm" "LXDE Login"
     "lightdm-gtk-greeter" "Other Login"
   )
@@ -1761,8 +1762,13 @@ displaymanager() {
       serviceenable sddm
       ;;
     "sddm-git")
-      instpkg "" sddm-git
+      instpkg "" "sddm-git"
       serviceenable sddm
+      ;;
+    "regreet")
+      instpkg "greetd-regreet" ""
+      regreet_configuration
+      serviceenable greetd
       ;;
     "lxdm")
       instpkg "lxdm" ""
@@ -1778,6 +1784,15 @@ displaymanager() {
       ;;
     esac
   fi
+}
+
+regreet_configuration() {
+  # Create greetd directory
+  sudo mkdir -p /etc/greetd
+  # Create config file
+  printf "%s\n" "[terminal]" "vt = 1" "" "[default_session]" "command = \"Hyprland --config /home/"$localuser"/.config/regreet/hyprland.conf\"" "user = \"greeter\"" | sudo tee /etc/greetd/config.toml >/dev/null
+  # Add user group 
+  sudo usermod -a -G video greeter
 }
 
 configmenu() {
@@ -1981,6 +1996,7 @@ dotfilesmenu() {
     "Fonts" ""
     "Sddm theme" "Sugar-Candy"
     "Wallpapers" ""
+    "KMSCON" "Virtual Console"
     "Remove neovim dotfiles" ""
   )
 
@@ -1995,14 +2011,18 @@ dotfilesmenu() {
       ;;
     "Neovim")
       neovim_dot
-      nextitem="Wallpapers"
-      ;;
-    "Wallpapers")
-      install_wallpapers
       nextitem="Sddm theme"
       ;;
     "Sddm theme")
       install_sddmtheme
+      nextitem="Wallpapers"
+      ;;
+    "Wallpapers")
+      install_wallpapers
+      nextitem="KMSCON"
+      ;;
+    "KMSCON")
+      install_kmscon
       nextitem="Remove neovim dotfiles"
       ;;
     "Remove neovim dotfiles")
@@ -2346,6 +2366,16 @@ install_wallpapers() {
       message "Wallpaper installation canceled." "Canceled" 8 50
     fi
   fi
+}
+
+install_kmscon() {
+  # Install KMSCON
+  instpkg "" "kmscon-macslow-git"
+  # Configure KMSCON
+  sudo mkdir -p /etc/kmscon
+  printf "%s\n" "font-name=JetBrainsMono Nerd Font" "font-size=14" | sudo tee /etc/kmscon/kmscon.conf >/dev/null
+  # Enable service
+  serviceenable kmsconvt@tty5.service
 }
 
 shutdownmenu() {
