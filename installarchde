@@ -863,7 +863,8 @@ consoleapps() {
     "mlocate" "" on
     "fd" "" on
     "ripgrep" "" on
-    "btop" "" on
+    "btop" "" off
+    "btop-no-gpu" "" on
     "nvtop" "" on
     "bat" "" on
     "psutils" "" on
@@ -883,6 +884,7 @@ consoleapps() {
       item=$(echo "$item" | tr -d '"')
       case $item in
       "cmatrix-neo-git") aurpkg="$aurpkg $item" ;;
+      "btop-no-gpu") aurpkg="$aurpkg $item" ;;
       *) pkg="$pkg $item" ;;
       esac
     done
@@ -1790,9 +1792,9 @@ regreet_configuration() {
   # Create greetd directory
   sudo mkdir -p /etc/greetd
   # Create config file
-  printf "%s\n" "[terminal]" "vt = 1" "" "[default_session]" "command = \"Hyprland --config /home/"$localuser"/.config/regreet/hyprland.conf\"" "user = \"greeter\"" | sudo tee /etc/greetd/config.toml >/dev/null
+  printf "%s\n" "[terminal]" "vt = 1" "" "[default_session]" "command = \"Hyprland --config /home/"$localuser"/.config/regreet/hyprland.conf\"" "user = \"$localuser\"" | sudo tee /etc/greetd/config.toml >/dev/null
   # Add user group 
-  sudo usermod -a -G video greeter
+  # sudo usermod -a -G video greeter
 }
 
 configmenu() {
