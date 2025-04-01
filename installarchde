@@ -177,24 +177,22 @@ symlink_sync_recursive() {
   done < <(find "$source_root" -mindepth 1 -print0)
 }
 
-# Usage:
-# clone_repo "Repo name"
-# clone_repo "Repo name" "Custom directory"
 clone_repo() {
   local repo_name="$1"
   local target_dir="${2:-$script_dir/$repo_name}"
   local repo_url="https://github.com/drpars/$repo_name.git"
+  local max_retries=3
+  local retry_count=0
 
   clear
 
-  # Validate repository name
+  # Improved validation
   if [[ -z "$repo_name" ]]; then
     echo "❌ Error: Repository name not specified!" >&2
     pressanykey
     return 1
   fi
 
-  # Validate repository name format
   if [[ ! "$repo_name" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
     echo "❌ Error: Invalid repository name format!" >&2
     echo "   Only letters, numbers, and ._- are allowed." >&2
@@ -202,71 +200,90 @@ clone_repo() {
     return 1
   fi
 
-  clone_now() {
-    # Clone operation
-    echo "🚀  Starting clone operation..."
-    if git clone --progress "$repo_url" "$target_dir"; then
-      echo -e "\n✅  Success: Repository cloned to $target_dir"
-      echo "📂  Cloned contents:"
-      command -v tree &>/dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
-    else
-      echo -e "\n❌  Critical Error: Clone failed (Exit code: $?)" >&2
-      echo "Possible reasons:" >&2
-      echo "1. Network issues or no internet connection" >&2
-      echo "2. Repository doesn't exist or is private" >&2
-      echo "3. Disk space or permission issues" >&2
-      pressanykey
-      return 1
-    fi
-
-    pressanykey
-  }
-
-  # Visual header
-  echo "┌─────────────────────────────────────────────────────────────┐"
-  echo "│󰄬  Cloning repository: $repo_name"
-  echo "├─────────────────────────────────────────────────────────────┤"
-  echo "│ Target directory: $target_dir"
-  echo "└─────────────────────────────────────────────────────────────┘"
+  # Visual header with color
+  echo -e "\033[1;36m┌─────────────────────────────────────────────────────────────┐\033[0m"
+  echo -e "\033[1;36m│󰄬  Repository: \033[1;33m$repo_name\033[0m"
+  echo -e "\033[1;36m├─────────────────────────────────────────────────────────────┤\033[0m"
+  echo -e "\033[1;36m│ Target: \033[0;34m$target_dir\033[0m"
+  echo -e "\033[1;36m└─────────────────────────────────────────────────────────────┘\033[0m"
   echo
 
-  # Directory safety checks
-  if [[ -d "$target_dir" ]]; then
-    # Critical protection: Prevent script directory deletion
+  clear
+  # Enhanced directory handling
+  if [[ -e "$target_dir" ]]; then
+    # Check if it's the script's own directory
     if [[ "$(realpath "$target_dir")" == "$(realpath "$script_dir")" ]]; then
-      echo "❌  Critical Error: Cannot clone into script's own directory!"
+      echo -e "\033[1;31m❌ Critical Error: Cannot clone into script's own directory!\033[0m"
       pressanykey
       return 1
     fi
 
-    # Handle non-empty directory
-    if [[ -n "$(ls -A "$target_dir")" ]]; then
-      echo "Directory contains:"
-      command -v tree &>/dev/null && tree -L 1 "$target_dir" || ls -la "$target_dir"
+    # Check repository status if directory exists
+    if [[ -d "$target_dir/.git" ]]; then
+      echo -e "\033[1;33m⚠  Repository already exists at: $target_dir\033[0m"
+      echo -e "Remote URL: $(git -C "$target_dir" config --get remote.origin.url)"
 
-      if ! confirm "Overwrite existing files in directory?" "" 8 60; then
+      if confirm "Re-clone repository? (This will overwrite existing files)" "no" 12 60; then
         clear
-        echo "⟳  Operation canceled by user"
-        pressanykey
-        # return 1
-      else
-        clear
-        echo "🧹  Cleaning directory..."
+        echo -e "\033[1;36m🧹  Cleaning directory...\033[0m"
         if ! rm -rf "${target_dir:?}"; then
-          echo "❌  Failed to clean directory!"
+          echo -e "\033[1;31m❌ Failed to clean directory!\033[0m"
           pressanykey
           return 1
         fi
-        # Clone repository
-        clone_now
+      else
+        clear
+        echo -e "\033[1;36m↩  Using existing repository\033[0m"
+        pressanykey
+        return 0 # Continue with existing repo
       fi
-
+    else
+      echo -e "\033[1;33m⚠  Directory exists but isn't a git repository: $target_dir\033[0m"
+      if confirm "Overwrite directory?" "no" 12 60; then
+        clear
+        echo -e "\033[1;36m🧹  Cleaning directory...\033[0m"
+        if ! rm -rf "${target_dir:?}"; then
+          echo -e "\033[1;31m❌ Failed to clean directory!\033[0m"
+          pressanykey
+          return 1
+        fi
+      else
+        clear
+        echo -e "\033[1;36m⏩  Skipping clone operation\033[0m"
+        pressanykey
+        return 0 # Continue without cloning
+      fi
     fi
-  else
-    # Clone repository
-    clone_now
   fi
 
+  # Enhanced clone operation with retry logic
+  while ((retry_count < max_retries)); do
+    echo -e "\033[1;36m🚀  Cloning repository (Attempt $((retry_count + 1))/$max_retries)...\033[0m"
+
+    if git clone --progress --depth 1 "$repo_url" "$target_dir"; then
+      echo -e "\n\033[1;32m✅  Successfully cloned to: $target_dir\033[0m"
+      echo -e "\033[1;36m📂  Directory structure:\033[0m"
+      command -v tree >/dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
+      pressanykey
+      return 0
+    else
+      echo -e "\n\033[1;31m❌  Clone failed (Attempt $((retry_count + 1))/$max_retries)\033[0m" >&2
+      ((retry_count++))
+
+      if ((retry_count < max_retries)); then
+        echo -e "\033[1;33m⟳  Retrying in 5 seconds...\033[0m"
+        sleep 5
+      else
+        echo -e "\033[1;31m💥  Critical Error: Clone failed after $max_retries attempts\033[0m" >&2
+        echo "Possible reasons:" >&2
+        echo "1. Network issues or no internet connection" >&2
+        echo "2. Repository doesn't exist or is private" >&2
+        echo "3. Disk space or permission issues" >&2
+        pressanykey
+        return 1
+      fi
+    fi
+  done
 }
 
 # Function to install rsync if it doesn't exist
@@ -891,11 +908,6 @@ consoleapps() {
 
     # Install selected packages
     instpkg "$pkg" "$aurpkg"
-
-    # Bat cache build
-    if command -v bat >/dev/null; then
-      bat cache --build >/dev/null
-    fi
   fi
 }
 
@@ -1257,7 +1269,7 @@ themeengine() {
     "qt6ct" "" off
     # "qt5ct-kde" "(AUR)" on
     "qt6ct-kde" "(AUR)" off
-    "darkly-qt5-git" "(AUR)" off
+    # "darkly-qt5-git" "(AUR)" off
     "darkly-qt6-git" "(AUR)" off
   )
 
@@ -1745,7 +1757,7 @@ displaymanager() {
     "gdm" "Gnome Login"
     "sddm" "QT5 Login"
     "sddm-git" "(AUR)"
-    "regreet" ""
+    # "regreet" ""
     "lxdm" "LXDE Login"
     "lightdm-gtk-greeter" "Other Login"
   )
@@ -1793,7 +1805,7 @@ regreet_configuration() {
   sudo mkdir -p /etc/greetd
   # Create config file
   printf "%s\n" "[terminal]" "vt = 1" "" "[default_session]" "command = \"Hyprland --config /home/"$localuser"/.config/regreet/hyprland.conf\"" "user = \"$localuser\"" | sudo tee /etc/greetd/config.toml >/dev/null
-  # Add user group 
+  # Add user group
   # sudo usermod -a -G video greeter
 }
 
@@ -1995,10 +2007,10 @@ dotfilesmenu() {
   local options=(
     "Manage Dotfiles" ""
     "Neovim" ""
-    "Fonts" ""
     "Sddm theme" "Sugar-Candy"
     "Wallpapers" ""
     "KMSCON" "Virtual Console"
+    "bat cache build" ""
     "Remove neovim dotfiles" ""
   )
 
@@ -2027,6 +2039,12 @@ dotfilesmenu() {
       install_kmscon
       nextitem="Remove neovim dotfiles"
       ;;
+    "bat cache build")
+      # Bat cache build
+      if command -v bat >/dev/null; then
+        bat cache --build >/dev/null
+      fi
+      ;;
     "Remove neovim dotfiles")
       if confirm "\nDo you want to remove nvim dotfiles ?" "" 8 60; then
         rm -rf /home/$localuser/.config/nvim
@@ -2048,28 +2066,34 @@ manage_dotfiles() {
   # Helper Functions
   # --------------------------
   validate_symlinks() {
-    local target_dir="$1"
+    local target_base="$1"
+    local items=("${@:2}")
     local broken_links=()
-    local exit_code=0 # Default success
+    local exit_code=0
 
-    echo "Validating symlinks in: $target_dir"
+    echo "Validating managed symlinks in: $target_base"
 
-    while IFS= read -r -d $'\0' link; do
-      if [[ ! -e "$(readlink -f "$link")" ]]; then
-        broken_links+=("$link → $(readlink "$link")")
-        exit_code=1 # Flag issues but continue processing
+    for item in "${items[@]}"; do
+      local target="${target_base}/${item}"
+      if [[ -L "$target" ]]; then
+        if [[ ! -e "$(readlink -f "$target")" ]]; then
+          broken_links+=("$target → $(readlink "$target")")
+          exit_code=1
+        fi
+      else
+        echo "Warning: $item is not a symlink" >&2
+        exit_code=1
       fi
-    done < <(find "$target_dir" -type l -exec test ! -e {} \; -print0)
+    done
 
-    # Display results without exiting
     if [[ ${#broken_links[@]} -gt 0 ]]; then
       echo -e "\n❌ Found broken symlinks:"
       printf '  - %s\n' "${broken_links[@]}"
     else
-      echo -e "\n✅ All symlinks are valid"
+      echo -e "\n✅ All managed symlinks are valid"
     fi
 
-    return $exit_code # Report status without aborting
+    return $exit_code
   }
 
   atomic_symlink() {
@@ -2077,9 +2101,7 @@ manage_dotfiles() {
     local target="$2"
     local temp_target="${target}.newlink"
 
-    # Create temporary link first
     if ln -sfn "$source" "$temp_target"; then
-      # Atomically replace target
       if mv -f "$temp_target" "$target"; then
         echo "Created: $target → $source"
         return 0
@@ -2094,11 +2116,9 @@ manage_dotfiles() {
   # --------------------------
   # Main Function Logic
   # --------------------------
-  # Ensure dependencies exist
   isrsync
   clone_repo "dotfiles" || return 1
 
-  # Validate directory structure
   local required_dirs=("config" "home")
   for dir in "${required_dirs[@]}"; do
     if [[ ! -d "${script_dir}/dotfiles/${dir}" ]]; then
@@ -2109,7 +2129,7 @@ manage_dotfiles() {
   done
 
   # --------------------------
-  # Configuration Selection
+  # Installation Processor
   # --------------------------
   show_selection_dialog() {
     local title="$1"
@@ -2135,13 +2155,16 @@ manage_dotfiles() {
     echo "$sel"
   }
 
-  # --------------------------
-  # Installation Processor
-  # --------------------------
   process_installation() {
-    local section="$1"     # "config" or "home"
-    local target_base="$2" # "$HOME/.config" or "$HOME"
+    local section="$1"
+    local target_base="$2"
     shift 2
+
+    # Unified backup configuration
+    local BACKUP_ROOT="$(xdg-user-dir DOCUMENTS)/dotfiles_backup"
+    local TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    local BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
+    mkdir -p "$BACKUP_DIR"
 
     # Selection dialog
     local sel=$(show_selection_dialog "Select ${section^} Files" "${script_dir}/dotfiles/${section}") || return 1
@@ -2160,24 +2183,21 @@ manage_dotfiles() {
 
     case $response in
     "Copy")
-      local backup_dir="${target_base}-backup-$(date +%Y%m%d-%H%M%S)"
-      mkdir -p "$backup_dir"
-
       clear
-      echo -e "Previewing ALL changes:\n"
+      echo -e "Previewing changes:\n"
       for item in $sel; do
         local item=$(echo "$item" | tr -d '"')
         local source="${script_dir}/dotfiles/${section}/${item}"
         local target="${target_base}/${item}"
 
         echo -e "─── $item ───"
-        [[ -d "$source" ]] && rsync -avh --dry-run "$source/" "$target/" --delete ||
-          rsync -avh --dry-run "$source" "$target" --delete
+        rsync -avh --dry-run --backup --backup-dir="$BACKUP_DIR" \
+          "$source" "$target" --delete
         echo
       done
       pressanykey
 
-      if confirm "Apply ALL changes? Backup will be stored in: $backup_dir"; then
+      if confirm "Apply changes? Backup location: $BACKUP_DIR"; then
         clear
         for item in $sel; do
           local item=$(echo "$item" | tr -d '"')
@@ -2185,66 +2205,66 @@ manage_dotfiles() {
           local target="${target_base}/${item}"
 
           echo -e "Installing: $item"
-          [[ -d "$source" ]] && rsync -avh --backup --backup-dir="$backup_dir" "$source/" "$target/" --delete ||
-            rsync -avh --backup --backup-dir="$backup_dir" "$source" "$target" --delete
+          rsync -avh --backup --backup-dir="$BACKUP_DIR" \
+            "$source" "$target" --delete
           pressanykey
-          clear
         done
       fi
       ;;
 
     "Symlink")
-      # Create backup dir
-      local backup_dir="${target_base}-backup-$(date +%Y%m%d-%H%M%S)"
-      mkdir -p "$backup_dir"
-
-      # Copy cloned repo to known location and validate
       local dotfiles_root="${HOME}/.dotfiles"
+      local managed_items=()
 
-      # Sync to target location
-      if ! rsync -a --backup --backup-dir="$backup_dir" "${script_dir}/dotfiles/" "${dotfiles_root}/" --delete; then
-        echo "Error: Failed to sync dotfiles to ${dotfiles_root}" >&2
-        return 1
+      # Sync with backup
+      if [[ ! -d "${dotfiles_root}" ]]; then
+        echo "Initializing dotfiles repository..."
+        if ! rsync -a --backup --backup-dir="${BACKUP_DIR}" \
+          "${script_dir}/dotfiles/" "${dotfiles_root}/"; then # Removed --delete
+          echo "Error: Failed to initialize dotfiles repository" >&2
+          return 1
+        fi
+      else
+        echo "Using existing dotfiles repository: ${dotfiles_root}"
       fi
 
       clear
       for item in $sel; do
         item=$(echo "$item" | tr -d '"')
-        local source="${script_dir}/dotfiles/${section}/${item}"
+        managed_items+=("$item")
+        local source="$dotfiles_root/${section}/${item}"
         local target="${target_base}/${item}"
 
         # Backup existing
         if [[ -e "$target" ]]; then
-          mv -f "$target" "${backup_dir}/" 2>/dev/null
+          echo "Backing up: $target"
+          mv -f "$target" "$BACKUP_DIR"
         fi
 
-        # Create parent directory
         mkdir -p "$(dirname "$target")"
-
-        # Create atomic symlink
-        if ! atomic_symlink "$source" "$target"; then
-          echo "Failed to create symlink for: $item" >&2
-        fi
+        atomic_symlink "$source" "$target"
       done
 
-      # Post-validation with continue
-      if validate_symlinks "$target_base"; then
-        echo "Success - all links valid"
+      # Validate only managed items
+      if validate_symlinks "$target_base" "${managed_items[@]}"; then
+        echo "Success - all managed links valid"
       else
-        read -p "Found broken links. Continue anyway? [y/N] " -n 1
+        read -p "Found issues. Continue anyway? [y/N] " -n 1
         [[ $REPLY =~ ^[Yy]$ ]] || return 1
       fi
-
-      pressanykey # Always reaches here
-      return 0    # Explicit success return
+      pressanykey
       ;;
 
     "Validate")
-      # Post-validation with continue
-      if validate_symlinks "$target_base"; then
-        echo "Success - all links valid"
+      local managed_items=()
+      for item in $sel; do
+        managed_items+=("$(echo "$item" | tr -d '"')")
+      done
+
+      if validate_symlinks "$target_base" "${managed_items[@]}"; then
+        echo "Success - all managed links valid"
       else
-        echo "Warning: Broken links detected" >&2
+        echo "Warning: Issues detected in managed links" >&2
       fi
       pressanykey
       ;;
@@ -2375,9 +2395,11 @@ install_kmscon() {
   instpkg "" "kmscon-macslow-git"
   # Configure KMSCON
   sudo mkdir -p /etc/kmscon
-  printf "%s\n" "font-name=JetBrainsMono Nerd Font" "font-size=14" | sudo tee /etc/kmscon/kmscon.conf >/dev/null
-  # Enable service
+  printf "%s\n" "font-name=JetBrainsMono Nerd Font" "font-size=14" "login=/bin/login -p -f $localuser" | sudo tee /etc/kmscon/kmscon.conf >/dev/null
+  # Enable service only tty5
   serviceenable kmsconvt@tty5.service
+  # All tty
+  # ln -s /usr/lib/systemd/system/kmsconvt@.service /etc/systemd/system/autovt@.service
 }
 
 shutdownmenu() {
