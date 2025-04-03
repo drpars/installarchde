@@ -1659,6 +1659,7 @@ plasma() {
     "print-manager" "" on
     "spectacle" "" on
     "kdiskmark" "" on
+    "packagekit" "" on
     "packagekit-qt5" "" on
     "latte-dock" "" off
     "latte-dock-git" "(AUR)" off
@@ -1719,9 +1720,7 @@ gnome() {
     "mutter" "" on
     "nautilus" "" on
     "sushi" "" on
-    "tracker" "" on
-    "tracker3-miners" "" on
-    "tracker-miners" "" on
+    "localsearch" "" on
     "xdg-user-dirs-gtk" "" on
     "gnome-tweaks" "" on
     "gnome-sudoku" "" on
@@ -1731,7 +1730,7 @@ gnome() {
     "gnome-mahjongg" "" on
     "gnome-chess" "" on
     "ghex" "" on
-    "gnome-software-packagekit-plugin" "" on
+    "gnome-packagekit" "" on
     "packagekit" "" on
   )
 
