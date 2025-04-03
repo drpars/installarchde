@@ -1632,7 +1632,7 @@ hyprland() {
 plasma() {
   local options=(
     "plasma" "" on
-    "plasma-wayland-session" "" on
+    "plasma-wayland-protocols" "" on
     "ark" "" on
     "dolphin" "" on
     "dolphin-plugins" "" on
@@ -1757,7 +1757,7 @@ displaymanager() {
     "gdm" "Gnome Login"
     "sddm" "QT5 Login"
     "sddm-git" "(AUR)"
-    # "regreet" ""
+    "regreet" ""
     "lxdm" "LXDE Login"
     "lightdm-gtk-greeter" "Other Login"
   )
@@ -1806,7 +1806,8 @@ regreet_configuration() {
   # Create config file
   printf "%s\n" "[terminal]" "vt = 1" "" "[default_session]" "command = \"Hyprland --config /home/"$localuser"/.config/regreet/hyprland.conf\"" "user = \"$localuser\"" | sudo tee /etc/greetd/config.toml >/dev/null
   # Add user group
-  # sudo usermod -a -G video greeter
+  sudo usermod -a -G video "$localuser"
+  sudo chown "$localuser":"$localuser" /etc/greetd
 }
 
 configmenu() {
@@ -2398,6 +2399,7 @@ install_kmscon() {
   printf "%s\n" "font-name=JetBrainsMono Nerd Font" "font-size=14" "login=/bin/login -p -f $localuser" | sudo tee /etc/kmscon/kmscon.conf >/dev/null
   # Enable service only tty5
   serviceenable kmsconvt@tty5.service
+  sudo localectl set-x11-keymap tr pc105 --no-ask-password
   # All tty
   # ln -s /usr/lib/systemd/system/kmsconvt@.service /etc/systemd/system/autovt@.service
 }
