@@ -2430,7 +2430,8 @@ shutdownmenu() {
 
 loadglobalscope() {
   # Package dependencies with explicit array
-  local packages=(
+  local packages=()
+  packages=(
     dialog
     neovim
     xdg-user-dirs
