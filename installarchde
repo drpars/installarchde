@@ -2062,11 +2062,15 @@ dotfilesmenu() {
 }
 
 manage_dotfiles() {
-  # --------------------------
-  # Helper Functions
-  # --------------------------
-  validate_symlinks() {
-    local target_base="$1"
+# --------------------------
+# Helper Functions
+# --------------------------
+
+# Validates if managed symlinks are pointing to valid sources.
+# $1: target_base directory (e.g., $HOME/.config)
+# $2..n: array of managed items
+validate_symlinks() {
+  local target_base="$1"
     local items=("${@:2}")
     local broken_links=()
     local exit_code=0
@@ -2075,13 +2079,16 @@ manage_dotfiles() {
 
     for item in "${items[@]}"; do
       local target="${target_base}/${item}"
+      
+      # Check if the target is a symlink
       if [[ -L "$target" ]]; then
+        # Check if the target of the symlink exists (-e checks the existence of the link's target)
         if [[ ! -e "$(readlink -f "$target")" ]]; then
           broken_links+=("$target → $(readlink "$target")")
           exit_code=1
         fi
       else
-        echo "Warning: $item is not a symlink" >&2
+        echo "Warning: $item is not a symlink, cannot validate source existence." >&2
         exit_code=1
       fi
     done
@@ -2096,12 +2103,17 @@ manage_dotfiles() {
     return $exit_code
   }
 
+  # Creates a symbolic link atomically to prevent broken state if interrupted.
+  # $1: source file/directory
+  # $2: target path
   atomic_symlink() {
     local source="$1"
     local target="$2"
     local temp_target="${target}.newlink"
 
+    # Create the symlink to a temporary target
     if ln -sfn "$source" "$temp_target"; then
+      # Atomically replace the old target (if any) with the new link
       if mv -f "$temp_target" "$target"; then
         echo "Created: $target → $source"
         return 0
@@ -2109,13 +2121,14 @@ manage_dotfiles() {
     fi
 
     echo "Failed to create symlink: $target" >&2
-    rm -f "$temp_target"
+    rm -f "$temp_target" # Clean up temporary file on failure
     return 1
   }
 
   # --------------------------
   # Main Function Logic
   # --------------------------
+  
   isrsync
   clone_repo "dotfiles" || return 1
 
@@ -2131,11 +2144,16 @@ manage_dotfiles() {
   # --------------------------
   # Installation Processor
   # --------------------------
+  
+  # Displays the dialog checklist for item selection.
+  # $1: Title
+  # $2: Path to scan
   show_selection_dialog() {
     local title="$1"
     local path="$2"
 
     local options=()
+    # Use find with -print0 and read -d $'\0' for safe handling of filenames with spaces/special characters.
     while IFS= read -r -d $'\0' item; do
       local clean_name="${item##*/}"
       options+=("$clean_name" "Configuration for $clean_name" off)
@@ -2155,6 +2173,9 @@ manage_dotfiles() {
     echo "$sel"
   }
 
+  # Handles the installation process (Copy, Symlink, or Validate).
+  # $1: section name (e.g., "config" or "home")
+  # $2: target base path (e.g., $HOME/.config or $HOME)
   process_installation() {
     local section="$1"
     local target_base="$2"
@@ -2169,6 +2190,17 @@ manage_dotfiles() {
     # Selection dialog
     local sel=$(show_selection_dialog "Select ${section^} Files" "${script_dir}/dotfiles/${section}") || return 1
     [[ -z "$sel" ]] && return 0
+    
+    # --- START: Robust selection parsing (Handles filenames with spaces) ---
+    local IFS=$'\n' # Set Internal Field Separator to newline only
+    
+    # 1. Remove quotes added by dialog (e.g., "file name")
+    local clean_sel
+    clean_sel=$(echo "$sel" | tr -d '"')
+
+    # 2. Convert the clean, newline-separated string into a robust array
+    local selected_items=($clean_sel)
+    # --- END: Robust selection parsing ---
 
     # Action selection
     local response=$(dialog --backtitle "$apptitle" \
@@ -2185,12 +2217,15 @@ manage_dotfiles() {
     "Copy")
       clear
       echo -e "Previewing changes:\n"
-      for item in $sel; do
-        local item=$(echo "$item" | tr -d '"')
-        local source="${script_dir}/dotfiles/${section}/${item}"
+      
+      # Use the robust array selected_items
+      for item in "${selected_items[@]}"; do
+        # FIX: Append '/' to the source path for rsync to copy the *contents* # of the directory, preventing redundant nested directories (e.g., Example/Example).
+        local source="${script_dir}/dotfiles/${section}/${item}/" 
         local target="${target_base}/${item}"
 
         echo -e "─── $item ───"
+        # --dry-run for preview
         rsync -avh --dry-run --backup --backup-dir="$BACKUP_DIR" \
           "$source" "$target" --delete
         echo
@@ -2199,12 +2234,13 @@ manage_dotfiles() {
 
       if confirm "Apply changes? Backup location: $BACKUP_DIR"; then
         clear
-        for item in $sel; do
-          local item=$(echo "$item" | tr -d '"')
-          local source="${script_dir}/dotfiles/${section}/${item}"
+        for item in "${selected_items[@]}"; do
+          # FIX: Append '/' to the source path for actual copy.
+          local source="${script_dir}/dotfiles/${section}/${item}/" 
           local target="${target_base}/${item}"
 
           echo -e "Installing: $item"
+          # Actual rsync execution
           rsync -avh --backup --backup-dir="$BACKUP_DIR" \
             "$source" "$target" --delete
           pressanykey
@@ -2216,11 +2252,12 @@ manage_dotfiles() {
       local dotfiles_root="${HOME}/.dotfiles"
       local managed_items=()
 
-      # Sync with backup
+      # Sync dotfiles repository with backup before creating symlinks
       if [[ ! -d "${dotfiles_root}" ]]; then
         echo "Initializing dotfiles repository..."
+        # FIX: Append '/' to the source and target for rsync to copy *contents* of the section directory.
         if ! rsync -a --backup --backup-dir="${BACKUP_DIR}" \
-          "${script_dir}/dotfiles/" "${dotfiles_root}/"; then # Removed --delete
+          "${script_dir}/dotfiles/${section}/" "${dotfiles_root}/${section}/"; then 
           echo "Error: Failed to initialize dotfiles repository" >&2
           return 1
         fi
@@ -2229,13 +2266,13 @@ manage_dotfiles() {
       fi
 
       clear
-      for item in $sel; do
-        item=$(echo "$item" | tr -d '"')
+      # Use the robust array selected_items
+      for item in "${selected_items[@]}"; do
         managed_items+=("$item")
         local source="$dotfiles_root/${section}/${item}"
         local target="${target_base}/${item}"
 
-        # Backup existing
+        # Backup existing target if it exists
         if [[ -e "$target" ]]; then
           echo "Backing up: $target"
           mv -f "$target" "$BACKUP_DIR"
@@ -2257,8 +2294,9 @@ manage_dotfiles() {
 
     "Validate")
       local managed_items=()
-      for item in $sel; do
-        managed_items+=("$(echo "$item" | tr -d '"')")
+      # Use the robust array selected_items
+      for item in "${selected_items[@]}"; do
+        managed_items+=("$item")
       done
 
       if validate_symlinks "$target_base" "${managed_items[@]}"; then
