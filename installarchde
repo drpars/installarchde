@@ -2257,7 +2257,7 @@ validate_symlinks() {
         echo "Initializing dotfiles repository..."
         # FIX: Append '/' to the source and target for rsync to copy *contents* of the section directory.
         if ! rsync -a --backup --backup-dir="${BACKUP_DIR}" \
-          "${script_dir}/dotfiles/${section}/" "${dotfiles_root}/${section}/"; then 
+          "${script_dir}/dotfiles/" "${dotfiles_root}/"; then 
           echo "Error: Failed to initialize dotfiles repository" >&2
           return 1
         fi
