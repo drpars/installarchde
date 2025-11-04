@@ -2062,15 +2062,15 @@ dotfilesmenu() {
 }
 
 manage_dotfiles() {
-# --------------------------
-# Helper Functions
-# --------------------------
+  # --------------------------
+  # Helper Functions
+  # --------------------------
 
-# Validates if managed symlinks are pointing to valid sources.
-# $1: target_base directory (e.g., $HOME/.config)
-# $2..n: array of managed items
-validate_symlinks() {
-  local target_base="$1"
+  # Validates if managed symlinks are pointing to valid sources.
+  # $1: target_base directory (e.g., $HOME/.config)
+  # $2..n: array of managed items
+  validate_symlinks() {
+    local target_base="$1"
     local items=("${@:2}")
     local broken_links=()
     local exit_code=0
@@ -2079,7 +2079,7 @@ validate_symlinks() {
 
     for item in "${items[@]}"; do
       local target="${target_base}/${item}"
-      
+
       # Check if the target is a symlink
       if [[ -L "$target" ]]; then
         # Check if the target of the symlink exists (-e checks the existence of the link's target)
@@ -2128,7 +2128,7 @@ validate_symlinks() {
   # --------------------------
   # Main Function Logic
   # --------------------------
-  
+
   isrsync
   clone_repo "dotfiles" || return 1
 
@@ -2144,7 +2144,7 @@ validate_symlinks() {
   # --------------------------
   # Installation Processor
   # --------------------------
-  
+
   # Displays the dialog checklist for item selection.
   # $1: Title
   # $2: Path to scan
@@ -2190,16 +2190,24 @@ validate_symlinks() {
     # Selection dialog
     local sel=$(show_selection_dialog "Select ${section^} Files" "${script_dir}/dotfiles/${section}") || return 1
     [[ -z "$sel" ]] && return 0
-    
-    # --- START: Robust selection parsing (Handles filenames with spaces) ---
-    local IFS=$'\n' # Set Internal Field Separator to newline only
-    
-    # 1. Remove quotes added by dialog (e.g., "file name")
-    local clean_sel
-    clean_sel=$(echo "$sel" | tr -d '"')
 
-    # 2. Convert the clean, newline-separated string into a robust array
-    local selected_items=($clean_sel)
+    # --- START: Robust selection parsing (Fixes issue with multi-selection) ---
+    local selected_items=()
+    local items_with_quotes=()
+    local IFS_TEMP=$IFS
+
+    # 1. Use space as IFS to split the quoted dialog output into an array of quoted items
+    IFS=' '
+    items_with_quotes=($sel)
+    IFS=$IFS_TEMP # Restore IFS immediately
+
+    # 2. Loop through and strip the surrounding quotes from each item to get clean file names
+    for item in "${items_with_quotes[@]}"; do
+      local clean_item
+      # sed command to strip leading (^) and trailing ($) quotes
+      clean_item=$(echo "$item" | sed 's/^"//; s/"$//')
+      selected_items+=("$clean_item")
+    done
     # --- END: Robust selection parsing ---
 
     # Action selection
@@ -2217,12 +2225,21 @@ validate_symlinks() {
     "Copy")
       clear
       echo -e "Previewing changes:\n"
-      
+
       # Use the robust array selected_items
       for item in "${selected_items[@]}"; do
-        # FIX: Append '/' to the source path for rsync to copy the *contents* # of the directory, preventing redundant nested directories (e.g., Example/Example).
-        local source="${script_dir}/dotfiles/${section}/${item}/" 
+        local full_source="${script_dir}/dotfiles/${section}/${item}"
         local target="${target_base}/${item}"
+        local source # rsync source path, adjusted for file vs directory
+
+        # CHECK: Adjust source path for rsync based on type (file or directory)
+        if [[ -d "$full_source" ]]; then
+          # If source is a directory, append '/' to copy *contents*
+          source="${full_source}/"
+        else
+          # If source is a file, use path as is
+          source="$full_source"
+        fi
 
         echo -e "─── $item ───"
         # --dry-run for preview
@@ -2235,12 +2252,19 @@ validate_symlinks() {
       if confirm "Apply changes? Backup location: $BACKUP_DIR"; then
         clear
         for item in "${selected_items[@]}"; do
-          # FIX: Append '/' to the source path for actual copy.
-          local source="${script_dir}/dotfiles/${section}/${item}/" 
+          local full_source="${script_dir}/dotfiles/${section}/${item}"
           local target="${target_base}/${item}"
+          local source
+
+          # CHECK: Adjust source path for rsync based on type
+          if [[ -d "$full_source" ]]; then
+            source="${full_source}/"
+          else
+            source="$full_source"
+          fi
 
           echo -e "Installing: $item"
-          # Actual rsync execution
+          # Actual rsync execution (using quiet mode '-q' is recommended, not added here to maintain original user options)
           rsync -avh --backup --backup-dir="$BACKUP_DIR" \
             "$source" "$target" --delete
           pressanykey
@@ -2255,9 +2279,9 @@ validate_symlinks() {
       # Sync dotfiles repository with backup before creating symlinks
       if [[ ! -d "${dotfiles_root}" ]]; then
         echo "Initializing dotfiles repository..."
-        # FIX: Append '/' to the source and target for rsync to copy *contents* of the section directory.
+        # Sync the section directory contents to the dotfiles root.
         if ! rsync -a --backup --backup-dir="${BACKUP_DIR}" \
-          "${script_dir}/dotfiles/" "${dotfiles_root}/"; then 
+          "${script_dir}/dotfiles/" "${dotfiles_root}/"; then
           echo "Error: Failed to initialize dotfiles repository" >&2
           return 1
         fi
@@ -2337,6 +2361,7 @@ validate_symlinks() {
     esac
   done
 }
+
 
 neovim_dot() {
   if confirm "\nDo you want to install neovim dotfiles for "$localuser" ?" "" 8 60; then
