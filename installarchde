@@ -2263,10 +2263,15 @@ manage_dotfiles() {
             source="$full_source"
           fi
 
+          if [[ -L "$target" ]]; then
+            echo "Removing existing symlink: $target"
+            rm -f "$target"
+          fi
+
           echo -e "Installing: $item"
-          # Actual rsync execution (using quiet mode '-q' is recommended, not added here to maintain original user options)
+          # Actual rsync execution
           rsync -avh --backup --backup-dir="$BACKUP_DIR" \
-            "$source" "$target" --delete          
+            "$source" "$target" --delete
         done
         pressanykey
       fi
