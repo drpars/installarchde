@@ -2266,9 +2266,9 @@ manage_dotfiles() {
           echo -e "Installing: $item"
           # Actual rsync execution (using quiet mode '-q' is recommended, not added here to maintain original user options)
           rsync -avh --backup --backup-dir="$BACKUP_DIR" \
-            "$source" "$target" --delete
-          pressanykey
+            "$source" "$target" --delete          
         done
+        pressanykey
       fi
       ;;
 
