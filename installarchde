@@ -1591,6 +1591,7 @@ hyprland() {
     "kitty" "" on
     "rofi-wayland" "" on
     "waybar" "" on
+    "waybar-updates" "(AUR)" on
     "wleave-git" "(AUR)" off
     "wlogout" "(AUR)" on
     "mako" "" on
@@ -1618,7 +1619,7 @@ hyprland() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "wleave-git" | "wlogout" | "iwdgui" | "iwgtk")
+      "wleave-git" | "wlogout" | "iwdgui" | "iwgtk" | "waybar-updates")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
