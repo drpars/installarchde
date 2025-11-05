@@ -2368,7 +2368,6 @@ manage_dotfiles() {
   done
 }
 
-
 neovim_dot() {
   if confirm "\nDo you want to install neovim dotfiles for "$localuser" ?" "" 8 60; then
     clear
@@ -2525,18 +2524,17 @@ loadglobalscope() {
 
   # Environment configuration
   local color_config="colors"
-  cat >"${color_config}" <<'EOF'
-use_shadow = OFF
-title_color = (BLACK,WHITE,OFF)
-button_label_active_color = (WHITE,BLUE,ON)
-button_label_inactive_color = (BLACK,WHITE,OFF)
-tag_color = (BLACK,WHITE,OFF)
-tag_selected_color = (WHITE,BLUE,ON)
-tag_key_color = (BLACK,WHITE,OFF)
-tag_key_selected_color = (WHITE,BLUE,ON)
-check_color = tag_color
-check_selected_color = tag_selected_color
-EOF
+  printf "%s\n" \
+    "use_shadow = OFF" \
+    "title_color = (BLACK,WHITE,OFF)" \
+    "button_label_active_color = (WHITE,BLUE,ON)" \
+    "button_label_inactive_color = (BLACK,WHITE,OFF)" \
+    "tag_color = (BLACK,WHITE,OFF)" \
+    "tag_selected_color = (WHITE,BLUE,ON)" \
+    "tag_key_color = (BLACK,WHITE,OFF)" \
+    "tag_key_selected_color = (WHITE,BLUE,ON)" \
+    "check_color = tag_color" \
+    "check_selected_color = tag_selected_color" >"${color_config}"
 
   export DIALOGRC="${color_config}"
   export EDITOR=nvim
