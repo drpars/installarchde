@@ -52,7 +52,7 @@ gpumodel() {
   fi
 }
 
-# GPU modelini kontrol eder.
+# Kullanıcı girişini bekler.
 pressanykey() {
   read -n1 -r -p "Devam etmek için bir tuşa basın..."
   echo
@@ -555,7 +555,7 @@ updatemenu() {
     "Packet Önbelleğini Temizle" "Pacman indirme önbelleğini temizle (pacman -Sc)"
     "" ""
     "Pacman Yapılandırmasını Düzenle" "/etc/pacman.conf dosyasını aç"
-    "Ayna Listesini Düzenle" "/etc/pacman.d/mirrorlist dosyasını aç"
+    "Mirrorlist Düzenle" "/etc/pacman.d/mirrorlist dosyasını aç"
     "" ""
     "Arch Anahtar Halkasını Güncelle" "archlinux-keyring paketini kur"
     "Pacman Anahtarlarını Yenile" "Tüm pacman anahtarlarını yenile"
@@ -613,9 +613,9 @@ updatemenu() {
     "Pacman Yapılandırmasını Düzenle")
       clear
       sudo nvim /etc/pacman.conf
-      nextitem="Ayna Listesini Düzenle"
+      nextitem="Mirrorlist Düzenle"
       ;;
-    "Ayna Listesini Düzenle")
+    "Mirrorlist Düzenle")
       clear
       sudo nvim /etc/pacman.d/mirrorlist
       nextitem="Arch Anahtar Halkasını Güncelle"
@@ -2820,6 +2820,16 @@ baslat() {
   if [[ $(id -u) -eq 0 ]]; then
     echo "Hata: Bu betik root (yönetici) olarak çalıştırılmamalıdır!" >&2
     return 1
+  fi
+
+  if [[ "$1" == "fonksiyonlar" ]]; then
+    # FONKSİYON LİSTELEME VE SÜTUNLARA AYIRMA
+    grep '() {' "$(realpath "$0")" |
+      grep -vE '^\s*#' |
+      grep -v 'realpath "$0"' |
+      sed 's/().*//' |
+      column # Çıktıyı terminal genişliğine göre sütunlara ayırır.
+    exit 0
   fi
 
   if [[ -z "$1" ]]; then

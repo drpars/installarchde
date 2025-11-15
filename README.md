@@ -1,6 +1,6 @@
 # 🇹🇷 Arch Linux DE & Uygulama Kurulum ve Yapılandırma Betiği (installarchde)
 
-Bu betik, şahsi kişisel ihtiyaçlardan dolayı oluşturulmuş olup, masaüstü ortamlarını, sürücüleri, uygulamaları ve system yapılandırmalarını **interaktif** bir Terminal Kullanıcı Arayüzü (TUI) aracılığıyla kurmak ve yönetmek için tasarlanmıştır.
+Bu betik, şahsi kişisel ihtiyaçlardan dolayı oluşturulmuş olup, masaüstü ortamlarını, sürücüleri, uygulamaları ve sistem yapılandırmalarını **interaktif** bir Terminal Kullanıcı Arayüzü (TUI) aracılığıyla kurmak ve yönetmek için tasarlanmıştır.
 
 `dialog` aracı kullanılarak oluşturulan menüler, kurulum sürecini daha az karmaşık hale getirir.
 
@@ -8,7 +8,7 @@ Bu betik, şahsi kişisel ihtiyaçlardan dolayı oluşturulmuş olup, masaüstü
 
 ## 🚨 Önemli Uyarı: Önyükleyici Desteği
 
-Betik içerisindeki bazı kritik system yapılandırmaları, özellikle **Takas (Swap) Dosyası Ayarları** ve **Hazırda Bekleme (Hibernation)** işlemleri, **systemd-boot** önyükleyicisi için tasarlanmıştır.
+Betik içerisindeki bazı kritik sistem yapılandırmaları, özellikle **Takas (Swap) Dosyası Ayarları** ve **Hazırda Bekleme (Hibernation)** işlemleri, **systemd-boot** önyükleyicisi için tasarlanmıştır.
 
 > ⚠️ **GRUB KULLANICILARI İÇİN UYARI:** Betikte yer alan çekirdek parametresi ayarlamalarının (örneğin, `swap_file_config` fonksiyonu) GRUB önyükleyicisinde otomatik olarak uygulanması şimdilik **desteklenmemektedir**. GRUB kullanıyorsanız, bu ayarları **elle** yapılandırmanız gerekecektir.
 
@@ -18,9 +18,9 @@ Betik içerisindeki bazı kritik system yapılandırmaları, özellikle **Takas 
 
 Betiğin ana menüsü (`mainmenu`) altında sunulan temel işlevler şunlardır:
 
-* **Güncelleme:** System ve AUR paketlerini güncelleme, packet önbelleğini temizleme, gereksiz bağımlılıkları kaldırma ve Pacman yapılandırma dosyalarını düzenleme.
+* **Güncelleme:** Sistem ve AUR paketlerini güncelleme, pacman önbelleğini temizleme, gereksiz bağımlılıkları kaldırma ve Pacman yapılandırma dosyalarını düzenleme.
 * **Kurulum:** Grafik sürücüleri (**AMD, NVIDIA**), **ASUS ROG/TUF** araçları, ses sistemi (**Pipewire**), uygulamalar, yazı tipleri, temalar ve **Masaüstü Ortamları/Pencere Yöneticileri** kurulumu.
-* **Yapılandırma:** **Dotfile'ları** yönetme (kopyalama/sembolik bağlama), ağ, swap/hazırda bekleme (hibernation) ve DDCI gibi özel system ayarlarını uygulama.
+* **Yapılandırma:** **Dotfile'ları** yönetme (kopyalama/sembolik bağlama), ağ, swap/hazırda bekleme (hibernation) ve DDCI gibi özel sistem ayarlarını uygulama.
 
 ---
 
@@ -59,11 +59,10 @@ Betiğin modüler yapısı sayesinde, betik içinde tanımlanmış her bir kurul
 ## Betik içerisindeki tüm fonksiyonları görme ve Çalıştırma :
 
 ```bash
-grep '() {' installarchde | grep -vE '^\s*#' | sed 's/().*//'
+./installarchde fonksiyonlar
 ```
 
 ```bash
 ./installarchde [FONKSIYON_ADI]
-
 ```
 
