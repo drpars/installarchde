@@ -1,13 +1,22 @@
 #!/bin/bash
 
+# ==========================================================
+# Arch Linux DE & Apps Kurulum ve Konfigürasyon Betiği
+# Bu betik, dialog menülerini kullanarak sürücüleri, uygulama
+# paketlerini, Masaüstü Ortamlarını ve system ayarlarını
+# interaktif olarak kurup yapılandırmak için tasarlanmıştır.
+# ==========================================================
+
 # --------------------------
-# Necessary Functions
+# Gerekli Fonksiyonlar
 # --------------------------
+
+# Kullanıcıya onay sorusu sorar. Geri dönüş kodu 0 ise Evet, 1 ise Hayır.
 confirm() {
   local prompt="$1"
-  local title="${2:-Confirmation}" # Default title is "Confirmation"
-  local height="${3:-0}"           # Default height
-  local width="${4:-0}"            # Default width
+  local title="${2:-Onay}"
+  local height="${3:-0}"
+  local width="${4:-0}"
 
   dialog --backtitle "$apptitle" --title "$title" --yesno "$prompt" "$height" "$width"
   return $?
@@ -15,49 +24,52 @@ confirm() {
 
 message() {
   local text="$1"
-  local title="${2:-Message}" # Default title is "Message"
-  local height="${3:-0}"      # Default height
-  local width="${4:-0}"       # Default width
+  local title="${2:-Mesaj}"
+  local height="${3:-0}"
+  local width="${4:-0}"
 
   dialog --backtitle "$apptitle" --title "$title" --msgbox "$text" "$height" "$width"
 }
 
+# CPU modelini kontrol eder.
 cpumodel() {
   local query="$1"
 
   if grep -qi "$query" /proc/cpuinfo; then
-    return 0 # Success (CPU matches)
+    return 0
   else
-    return 1 # Failure (CPU does not match)
+    return 1
   fi
 }
 
+# GPU modelini kontrol eder.
 gpumodel() {
   local query="$1"
-  # Search in both VGA and 3D controller entries for better coverage
   if lspci | grep -Ei "VGA|3D" | grep -qi "$query"; then
-    return 0 # GPU vendor found
+    return 0
   else
-    return 1 # GPU vendor not found
+    return 1
   fi
 }
 
-# Function to wait for user input
+# GPU modelini kontrol eder.
 pressanykey() {
-  read -n1 -r -p "Press any key to continue..."
+  read -n1 -r -p "Devam etmek için bir tuşa basın..."
   echo
 }
 
+# Global değişkenleri temizler.
 resetvalue() {
   for arg; do
     unset ${arg}
   done
 }
 
-# Function to install packages
+# Packet yükleme fonksiyonu (Pacman ve AUR)
 instpkg() {
   clear
-  # Declare pkg and aurpkg as global variables
+  # pkg: Pacman'den yüklenecek paketler
+  # aurpkg: AUR'dan (yay/paru) yüklenecek paketler
   pkg="$1"
   aurpkg="$2"
 
@@ -74,60 +86,53 @@ instpkg() {
     elif command -v paru &>/dev/null; then
       aurhelper="paru"
     else
-      echo "To install AUR packages, you need to install an AUR helper (yay or paru) in the Update menu!"
+      echo "AUR paketlerini kurmak için bir AUR yardımcısı (yay veya paru) Kurulum/Güncelleme menüsünden yüklenmelidir!"
       return 1
     fi
 
     echo "# sudo -u $localuser $aurhelper -S --needed $aurpkg"
-    sudo -u $localuser $aurhelper -S --needed $aurpkg
+    sudo -u "$localuser" "$aurhelper" -S --needed "$aurpkg"
     pressanykey
   fi
 
-  # Reset variables after use
   resetvalue pkg aurpkg
 }
 
-# Function to choose packages interactively
+# İnteraktif packet seçme fonksiyonu (Pacman depolarından arama yapar)
 choosepkg() {
   local search_term="$1"
-  local title="${2:-$1}" # Use $1 as the title if $2 is not provided
+  local title="${2:-$1}"
   local options=()
   local items
 
-  # Get the list of packages matching the search term
   items=$(pacman -Ssq "$search_term")
 
-  # Build the options array for dialog
   for item in $items; do
     options+=("$item" "" off)
   done
 
-  # Show the dialog menu
   local sel
   sel=$(dialog --backtitle "$apptitle" --title "$title" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
-  # Check if the user canceled the dialog
   if [[ "$?" -ne 0 ]]; then
     return 1
   fi
 
-  # Process the selected packages
   local pkg=""
   for itm in $sel; do
     pkg="$pkg $(echo "$itm" | sed 's/"//g')"
   done
 
-  # Install the selected packages
   instpkg "$pkg" "$aurpkg"
   return 0
 }
 
-# Function to enable a systemd service
+# Systemd servisini etkinleştirir
 serviceenable() {
   local service_name="$1"
   local display_name="${2:-$1}" # Use $1 if $2 is not provided
 
-  if confirm "Start $display_name service at boot?\n\nsystemctl enable $service_name"; then
+  if confirm "Önyüklemede $display_name servisini başlatmak istiyor musunuz?\n\nsystemctl enable $service_name"; then
     clear
     echo "sudo systemctl enable $service_name"
     sudo systemctl enable "$service_name"
@@ -135,12 +140,12 @@ serviceenable() {
   fi
 }
 
-# Function to disable a systemd service
+# Systemd servisini devre dışı bırakır
 servicedisable() {
   local service_name="$1"
   local display_name="${2:-$1}" # Use $1 if $2 is not provided
 
-  if confirm "Disable $display_name service at boot?\n\nsystemctl disable $service_name"; then
+  if confirm "Önyüklemede $display_name servisini devre dışı bırakmak istiyor musunuz?\n\nsystemctl disable $service_name"; then
     clear
     echo "sudo systemctl disable $service_name"
     sudo systemctl disable "$service_name"
@@ -148,7 +153,7 @@ servicedisable() {
   fi
 }
 
-# symlink_sync "/path/to/source" "/path/to/target"
+# Tek bir dosya/dizin için sembolik bağ (symlink) oluşturur
 symlink_sync() {
   local anysource="$1"
   local anytarget="$2"
@@ -157,16 +162,12 @@ symlink_sync() {
   local abs_source=$(realpath -e "$anysource")
   local abs_target_parent=$(dirname "$(realpath -m "$anytarget")")
 
-  # Create parent directories if needed
   mkdir -p "$abs_target_parent"
-
-  # Create relative symlink (recommended for portability)
   local relative_path=$(realpath --relative-to="$abs_target_parent" "$abs_source")
-
   ln -svfn "$relative_path" "$anytarget"
 }
 
-# symlink_sync_recursive "/path/to/source_dir" "/path/to/target_dir"
+# Bir dizindeki tüm öğeler için özyinelemeli sembolik bağ oluşturur
 symlink_sync_recursive() {
   local source_root="$1"
   local target_root="$2"
@@ -177,6 +178,7 @@ symlink_sync_recursive() {
   done < <(find "$source_root" -mindepth 1 -print0)
 }
 
+# Git deposu klonlama fonksiyonu
 clone_repo() {
   local repo_name="$1"
   local target_dir="${2:-$script_dir/$repo_name}"
@@ -186,99 +188,89 @@ clone_repo() {
 
   clear
 
-  # Improved validation
   if [[ -z "$repo_name" ]]; then
-    echo "❌ Error: Repository name not specified!" >&2
+    echo "Hata: Depo adı belirtilmedi!" >&2
     pressanykey
     return 1
   fi
 
   if [[ ! "$repo_name" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
-    echo "❌ Error: Invalid repository name format!" >&2
-    echo "   Only letters, numbers, and ._- are allowed." >&2
+    echo "Hata: Geçersiz depo adı formatı!" >&2
+    echo "Sadece harf, rakam ve ._- karakterlerine izin verilir." >&2
     pressanykey
     return 1
   fi
 
-  # Visual header with color
   echo -e "\033[1;36m┌─────────────────────────────────────────────────────────────┐\033[0m"
-  echo -e "\033[1;36m│󰄬  Repository: \033[1;33m$repo_name\033[0m"
+  echo -e "\033[1;36m│󰄬  Depo: \033[1;33m$repo_name\033[0m"
   echo -e "\033[1;36m├─────────────────────────────────────────────────────────────┤\033[0m"
-  echo -e "\033[1;36m│ Target: \033[0;34m$target_dir\033[0m"
+  echo -e "\033[1;36m│  Hedef: \033[0;34m$target_dir\033[0m"
   echo -e "\033[1;36m└─────────────────────────────────────────────────────────────┘\033[0m"
   echo
 
   clear
-  # Enhanced directory handling
   if [[ -e "$target_dir" ]]; then
-    # Check if it's the script's own directory
     if [[ "$(realpath "$target_dir")" == "$(realpath "$script_dir")" ]]; then
-      echo -e "\033[1;31m❌ Critical Error: Cannot clone into script's own directory!\033[0m"
+      echo -e "\033[1;31m Kritik Hata: Betiğin kendi dizinine klonlama yapılamaz!\033[0m"
       pressanykey
       return 1
     fi
 
-    # Check repository status if directory exists
     if [[ -d "$target_dir/.git" ]]; then
-      echo -e "\033[1;33m⚠  Repository already exists at: $target_dir\033[0m"
-      echo -e "Remote URL: $(git -C "$target_dir" config --get remote.origin.url)"
+      echo -e "\033[1;33m Depo zaten var: $target_dir\033[0m"
+      echo -e "Uzak URL: $(git -C "$target_dir" config --get remote.origin.url)"
 
-      if confirm "Re-clone repository? (This will overwrite existing files)" "no" 12 60; then
+      if confirm "Depoyu yeniden klonla? (Mevcut dosyaların üzerine yazılacak)" "no" 12 60; then
         clear
-        echo -e "\033[1;36m🧹  Cleaning directory...\033[0m"
+        echo -e "\033[1;36m Dizin temizleniyor...\033[0m"
         if ! rm -rf "${target_dir:?}"; then
-          echo -e "\033[1;31m❌ Failed to clean directory!\033[0m"
+          echo -e "\033[1;31m Dizin temizlenemedi!\033[0m"
           pressanykey
           return 1
         fi
       else
         clear
-        echo -e "\033[1;36m↩  Using existing repository\033[0m"
+        echo -e "\033[1;36m Mevcut depo kullanılıyor\033[0m"
         pressanykey
         return 0 # Continue with existing repo
       fi
     else
-      echo -e "\033[1;33m⚠  Directory exists but isn't a git repository: $target_dir\033[0m"
+      echo -e "\033[1;33m Dizin var ancak git deposu değil: $target_dir\033[0m"
       if confirm "Overwrite directory?" "no" 12 60; then
         clear
-        echo -e "\033[1;36m🧹  Cleaning directory...\033[0m"
+        echo -e "\033[1;36m Dizin temizleniyor...\033[0m"
         if ! rm -rf "${target_dir:?}"; then
-          echo -e "\033[1;31m❌ Failed to clean directory!\033[0m"
+          echo -e "\033[1;31m Dizin temizlenemedi!\033[0m"
           pressanykey
           return 1
         fi
       else
         clear
-        echo -e "\033[1;36m⏩  Skipping clone operation\033[0m"
+        echo -e "\033[1;36m Klonlama işlemi atlanıyor\033[0m"
         pressanykey
-        return 0 # Continue without cloning
+        return 0
       fi
     fi
   fi
 
-  # Enhanced clone operation with retry logic
   while ((retry_count < max_retries)); do
-    echo -e "\033[1;36m🚀  Cloning repository (Attempt $((retry_count + 1))/$max_retries)...\033[0m"
+    echo -e "\033[1;36m Depo klonlanıyor (Deneme $((retry_count + 1))/$max_retries)...\033[0m"
 
     if git clone --progress --depth 1 "$repo_url" "$target_dir"; then
-      echo -e "\n\033[1;32m✅  Successfully cloned to: $target_dir\033[0m"
-      echo -e "\033[1;36m📂  Directory structure:\033[0m"
+      echo -e "\n\033[1;32m Başarıyla klonlandı: $target_dir\033[0m"
+      echo -e "\033[1;36m Dizin yapısı:\033[0m"
       command -v tree >/dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
       pressanykey
       return 0
     else
-      echo -e "\n\033[1;31m❌  Clone failed (Attempt $((retry_count + 1))/$max_retries)\033[0m" >&2
+      echo -e "\n\033[1;31m Klonlama başarısız (Deneme $((retry_count + 1))/$max_retries)\033[0m" >&2
       ((retry_count++))
 
       if ((retry_count < max_retries)); then
-        echo -e "\033[1;33m⟳  Retrying in 5 seconds...\033[0m"
+        echo -e "\033[1;33m 5 saniye sonra tekrar deneniyor...\033[0m"
         sleep 5
       else
-        echo -e "\033[1;31m💥  Critical Error: Clone failed after $max_retries attempts\033[0m" >&2
-        echo "Possible reasons:" >&2
-        echo "1. Network issues or no internet connection" >&2
-        echo "2. Repository doesn't exist or is private" >&2
-        echo "3. Disk space or permission issues" >&2
+        echo -e "\033[1;31m Kritik Hata: $max_retries denemeden sonra klonlama başarısız\033[0m" >&2
         pressanykey
         return 1
       fi
@@ -286,51 +278,268 @@ clone_repo() {
   done
 }
 
-# Function to install rsync if it doesn't exist
+# rsync'in kurulu olup olmadığını kontrol eder ve kurar
 isrsync() {
   if ! command -v rsync &>/dev/null; then
     clear
-    echo "Installing rsync ..."
+    echo "rsync kuruluyor ..."
     instpkg "rsync" ""
     pressanykey
   fi
 }
+
+ddci-setup() {
+  # =================================================================
+  # DDCCI KURULUM VE SİSTEM HAZIRLIK
+  # Yöntem: Manuel Tetikleme Retry Loop
+  # "journalctl -xeu ddcci-backlight-retry.service" ile kurulum sonrası kontrol yapılabilir.
+  # =================================================================
+
+  # Gerekli dosya/modül adları
+  DDCCI_MODULE="ddcci"
+  DDCCI_BACKLIGHT_MODULE="ddcci-backlight"
+  MODULES_CONF="/etc/modules-load.d/ddcci.conf"
+  AUR_DRIVER="ddcci-driver-linux-dkms-git"
+  RETRY_SCRIPT="/usr/local/bin/ddcci-retry-loader.sh"
+  SERVICE_FILE="/etc/systemd/system/ddcci-backlight-retry.service"
+
+  # =================================================================
+  # D D C I - F O N K S İ Y O N L A R
+  # =================================================================
+
+  # 1. I2C Numarasını bulan fonksiyon
+  find_i2c_number() {
+    if ! command -v ddcutil &>/dev/null; then
+      echo "HATA: 'ddcutil' komutu bulunamadı." >&2
+      read -r -p "ddcutil paketini kurmak ister misiniz? (Arch Linux: sudo pacman -S ddcutil) [e/H] " response
+      response=${response,,}
+      if [[ "$response" =~ ^(e|evet)$ ]]; then
+        echo "ddcutil kuruluyor..."
+        if instpkg ddcutil ""; then
+          echo "ddcutil başarıyla kuruldu."
+        else
+          echo "HATA: ddcutil kurulumu başarısız oldu." >&2
+          return 1
+        fi
+      else
+        echo "Kurulum iptal edildi." >&2
+        return 1
+      fi
+    fi
+    local I2C_NUMBER
+    I2C_NUMBER=$(ddcutil detect 2>/dev/null |
+      grep -E '^[[:space:]]*I2C bus:' |
+      head -n 1 |
+      grep -Eo '[0-9]+' |
+      tail -n 1)
+
+    if [ -z "$I2C_NUMBER" ]; then
+      echo "KRİTİK HATA: DDC/CI destekleyen bir monitör bulunamadı." >&2
+      return 1
+    else
+      echo "$I2C_NUMBER"
+      return 0
+    fi
+  }
+
+  # 2. AUR sürücüsünü kontrol eden ve kuran fonksiyon
+  install_aur_driver() {
+    if pacman -Qq "$AUR_DRIVER" &>/dev/null; then
+      echo "BİLGİ: $AUR_DRIVER sürücüsü zaten kurulu."
+      return 0
+    fi
+    echo "UYARI: $AUR_DRIVER sürücüsü kurulu değil." >&2
+    if ! command -v yay &>/dev/null; then
+      echo "KRİTİK HATA: 'yay' komutu bulunamadı. Lütfen yay'ı kurun." >&2
+      return 1
+    fi
+    read -r -p "$AUR_DRIVER sürücüsünü yay ile kurmak ister misiniz? (AUR paketi) [e/H] " response
+    response=${response,,}
+    if [[ "$response" =~ ^(e|evet)$ ]]; then
+      echo "$AUR_DRIVER kuruluyor..."
+      if instpkg "" "$AUR_DRIVER"; then
+        echo "$AUR_DRIVER başarıyla kuruldu."
+        return 0
+      else
+        echo "HATA: $AUR_DRIVER kurulumu başarısız oldu." >&2
+        return 1
+      fi
+    else
+      echo "Kurulum iptal edildi."
+      return 1
+    fi
+  }
+
+  # 3. Modülleri otomatik yükleme için ayarlayan fonksiyon
+  setup_modules_load() {
+    echo "--- Modül Yükleme Kurulumu ---"
+    # Modüllerin otomatik yüklenmesi (modülün var olması şarttır)
+    echo "BİLGİ: Çekirdek modüllerini kalıcı olarak yüklemek üzere $MODULES_CONF dosyasına ekleniyor."
+    echo "$DDCCI_MODULE" | sudo tee "$MODULES_CONF" >/dev/null
+    echo "$DDCCI_BACKLIGHT_MODULE" | sudo tee -a "$MODULES_CONF" >/dev/null
+  }
+
+  # 4. Systemd Retry Loader'ı oluşturan ve etkinleştiren fonksiyon
+  create_systemd_retry_loader() {
+    local I2C_NUM="$1"
+
+    echo "--- Systemd Retry Loader Oluşturuluyor ---"
+
+    # a) Retry Loader Script'i Oluşturuluyor
+    echo "BİLGİ: Retry Loader script'i $RETRY_SCRIPT oluşturuluyor."
+
+    cat <<EOF | sudo tee "$RETRY_SCRIPT" >/dev/null
+#!/bin/bash
+MAX_ATTEMPTS=7
+I2C_NUM="$I2C_NUM" 
+DDCCI_DEVICE="ddcci\${I2C_NUM}"
+
+echo "[\$0] DDCCI Retry Loader başlatılıyor. I2C: \${I2C_NUM}"
+
+# 1. Manuel Tetikleme
+echo 'ddcci 0x37' > "/sys/bus/i2c/devices/i2c-\${I2C_NUM}/new_device" 2>/dev/null
+  
+for i in \$(seq 1 \$MAX_ATTEMPTS); do
+  if [ -d "/sys/class/backlight/\$DDCCI_DEVICE" ]; then
+    echo "[\$0] BAŞARILI: Cihaz \$DDCCI_DEVICE \$i. denemede bulundu."
+    exit 0
+  fi
+  
+  echo "[\$0] Deneme \$i/\$MAX_ATTEMPTS: Manuel tetikleme ve yeniden yükleme deneniyor..."
+
+  # 2. Modüllerin Yeniden Yüklenmesi (Bu, cihazın zorla benimsediği kayıt işlemini tamamlar)
+  /usr/bin/modprobe -r ddcci-backlight 2>/dev/null
+  /usr/bin/modprobe -r ddcci 2>/dev/null
+  /usr/bin/modprobe ddcci 
+  /usr/bin/modprobe ddcci-backlight
+  
+  /usr/bin/sleep 1
+done
+
+echo "[\$0] KRİTİK HATA: Cihaz \$DDCCI_DEVICE \$MAX_ATTEMPTS denemeden sonra bulunamadı." >&2
+exit 1
+EOF
+
+    sudo chmod +x "$RETRY_SCRIPT"
+
+    # b) Systemd Service İçeriği
+    local SERVICE_CONTENT="[Unit]
+Description=DDCCI Backlight Retry Loader for i2c-$I2C_NUM
+Wants=systemd-modules-load.service local-fs.target
+After=systemd-modules-load.service local-fs.target
+After=display-manager.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=$RETRY_SCRIPT
+TimeoutSec=10 
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target"
+
+    echo "$SERVICE_CONTENT" | sudo tee "$SERVICE_FILE" >/dev/null
+
+    # c) Hizmeti Etkinleştir
+    echo "BİLGİ: ddcci-backlight-retry.service etkinleştiriliyor."
+    sudo systemctl daemon-reload
+    sudo systemctl enable ddcci-backlight-retry.service >/dev/null 2>&1
+
+    echo "BAŞARILI: Systemd Retry Hizmeti kuruldu ve etkinleştirildi."
+  }
+
+  # 5. Anında Kontrol Fonksiyonu
+  instant_check_and_trigger() {
+    local I2C_NUM="$1"
+    local DDCCI_DEVICE="ddcci${I2C_NUM}"
+
+    echo "--- Anında Kontrol ve Tetikleme ---"
+
+    echo "BİLGİ: Retry Loader hizmeti anında başlatılıyor..."
+    sudo systemctl start ddcci-backlight-retry.service
+
+    sleep 3
+    if [ -d "/sys/class/backlight/$DDCCI_DEVICE" ]; then
+      echo "=========================================================="
+      echo "BAŞARILI! DDCCI cihazı ($DDCCI_DEVICE) anında algılandı."
+      return 0
+    else
+      echo "KRİTİK HATA: Anında algılama başarısız oldu." >&2
+      return 1
+    fi
+  }
+
+  # =================================================================
+  # A N A  Ç A L I Ş M A
+  # =================================================================
+
+  echo "DDCCI Kurulum Script'i Başlatılıyor (Nihai Versiyon)..."
+
+  # Önceki başarısız denemelerden kalıntıları temizle
+  echo "BİLGİ: Önceki systemd servisleri ve modül ayarları temizleniyor..."
+  # modprobe.d dosyasını da temizleyelim
+  sudo systemctl disable ddcci-backlight-retry.service 2>/dev/null
+  sudo rm "$SERVICE_FILE" "$RETRY_SCRIPT" /etc/modprobe.d/ddcci.conf 2>/dev/null
+  sudo systemctl daemon-reload
+
+  # 1. Sürücüyü kontrol et/kur
+  if ! install_aur_driver; then exit 1; fi
+
+  # 2. I2C Numarasını bul
+  I2C_NUM=$(find_i2c_number)
+  if [ $? -ne 0 ]; then exit 1; fi
+
+  # 3. Modüllerin yüklenmesini ayarla
+  setup_modules_load "$I2C_NUM"
+
+  # 4. Systemd Retry Loader'ı oluştur ve etkinleştir
+  create_systemd_retry_loader "$I2C_NUM"
+
+  # 5. Anında test et ve tetikle
+  if instant_check_and_trigger "$I2C_NUM"; then
+    echo "Kurulum tamamlandı. Cihaz anında algılandı. Systemd servisi kalıcı çözümünüzdür. Keyifli kullanımlar!"
+  else
+    echo "Kurulum tamamlandı. Anında algılama başarısız olsa da, **sistemin yeniden başlatılması gerekir**. Retry hizmeti açılışta denemeye devam edecektir."
+  fi
+}
+
+# --------------------------
+# ANA MENÜLER
 # --------------------------
 
-# Display the main menu
+# Ana Menüyü gösterir
 mainmenu() {
-  local nextitem="${1:-.}" # Default to "." if no argument is provided
+  local nextitem="${1:-.}"
   local options=(
-    "Update" ""
-    "Install" ""
-    "Config" ""
-    "Shutdown" ""
+    "Güncelleme" "System ve AUR güncellemeleri ile ilgili araçlar"
+    "Kurulum" "Sürücüler, uygulamalar, masaüstü ortamları kurulumu"
+    "Yapılandırma" "Dotfile'lar, ağ, takas alanı ve sanallaştırma ayarları"
+    "Kapatma" "Sistemi kapatma veya yeniden başlatma seçenekleri"
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Main Menu" --default-item "${nextitem}" --cancel-button "Exit" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Ana Menü" --default-item "${nextitem}" --cancel-button "Çıkış" --menu "Yapılacak işlemi seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq "0" ]]; then
     case ${sel} in
-    "Update")
+    "Güncelleme")
       updatemenu
-      nextitem="Install"
+      nextitem="Kurulum"
       ;;
-    "Install")
+    "Kurulum")
       installmenu
-      nextitem="Config"
+      nextitem="Yapılandırma"
       ;;
-    "Config")
+    "Yapılandırma")
       configmenu
-      nextitem="Shutdown"
+      nextitem="Kapatma"
       ;;
-    "Shutdown")
+    "Kapatma")
       shutdownmenu
-      nextitem="Shutdown"
+      nextitem="Kapatma"
       ;;
     esac
-
-    # Recursively call main menu with the next item
     mainmenu "${nextitem}"
   fi
 }
@@ -338,35 +547,33 @@ mainmenu() {
 updatemenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Install yay" ""
-    "Install paru" ""
+    "yay Kur" "AUR yardımcısı yay'ı kur"
+    "paru Kur" "AUR yardımcısı paru'yu kur"
     "" ""
-    "Upgrade" "pacman -Syu"
-    "Clean orphan" "pacman -Rns \$(pacman -Qqtd)"
-    "Clean cache" "pacman -Sc"
+    "System Güncelle" "pacman -Syu komutunu çalıştır"
+    "Gereksiz Bağımlılıkları Temizle" "Yalnız kalan (orphan) paketleri kaldır"
+    "Packet Önbelleğini Temizle" "Pacman indirme önbelleğini temizle (pacman -Sc)"
     "" ""
-    "Edit pacman.conf" ""
-    "Edit mirrorlist" ""
+    "Pacman Yapılandırmasını Düzenle" "/etc/pacman.conf dosyasını aç"
+    "Ayna Listesini Düzenle" "/etc/pacman.d/mirrorlist dosyasını aç"
     "" ""
-    "Update keyring" "pacman -S archlinux-keyring"
-    "Refresh pacman keys" "pacman-key --refresh-keys"
-    "" ""
+    "Arch Anahtar Halkasını Güncelle" "archlinux-keyring paketini kur"
+    "Pacman Anahtarlarını Yenile" "Tüm pacman anahtarlarını yenile"
   )
-  # Add "Remove db.lck" option if the lock file exists
   if [[ -f /var/lib/pacman/db.lck ]]; then
     options+=(
-      "Remove db.lck" "rm /var/lib/pacman/db.lck"
+      "Pacman Kilit Dosyasını Kaldır" "Pacman veritabanı kilit dosyasını (db.lck) sil"
       "" ""
     )
   fi
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Updates Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Güncelleme Menüsü :" --default-item "${nextitem}" --cancel-button "Geri" --menu "Seçim yapın:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Install yay")
-      if confirm "\nDo you want to install yay?" "" 8 60; then
+    "yay Kur")
+      if confirm "\nyay kurulsun mu?" "" 8 60; then
         clear
         git clone https://aur.archlinux.org/yay-bin.git
         cd yay-bin || return
@@ -375,10 +582,10 @@ updatemenu() {
         rm -rf yay-bin
         pressanykey
       fi
-      nextitem="Install paru"
+      nextitem="paru Kur"
       ;;
-    "Install paru")
-      if confirm "\nDo you want to install paru?" "" 8 60; then
+    "paru Kur")
+      if confirm "\nparu kurulsun mu?" "" 8 60; then
         clear
         git clone https://aur.archlinux.org/paru.git
         cd paru || return
@@ -386,47 +593,47 @@ updatemenu() {
         cd ..
         pressanykey
       fi
-      nextitem="Upgrade"
+      nextitem="System Güncelle"
       ;;
-    "Upgrade")
+    "System Güncelle")
       clear
       sudo pacman -Syu
-      nextitem="Clean orphan"
+      nextitem="Gereksiz Bağımlılıkları Temizle"
       ;;
-    "Clean orphan")
+    "Gereksiz Bağımlılıkları Temizle")
       clear
       sudo pacman -Rns $(pacman -Qqtd)
-      nextitem="Clean cache"
+      nextitem="Packet Önbelleğini Temizle"
       ;;
-    "Clean cache")
+    "Packet Önbelleğini Temizle")
       clear
       sudo pacman -Sc
-      nextitem="Edit pacman.conf"
+      nextitem="Pacman Yapılandırmasını Düzenle"
       ;;
-    "Edit pacman.conf")
+    "Pacman Yapılandırmasını Düzenle")
       clear
       sudo nvim /etc/pacman.conf
-      nextitem="Edit mirrorlist"
+      nextitem="Ayna Listesini Düzenle"
       ;;
-    "Edit mirrorlist")
+    "Ayna Listesini Düzenle")
       clear
       sudo nvim /etc/pacman.d/mirrorlist
-      nextitem="Update keyring"
+      nextitem="Arch Anahtar Halkasını Güncelle"
       ;;
-    "Update keyring")
+    "Arch Anahtar Halkasını Güncelle")
       clear
       sudo pacman -S archlinux-keyring
-      nextitem="Refresh pacman keys"
+      nextitem="Pacman Anahtarlarını Yenile"
       ;;
-    "Refresh pacman keys")
+    "Pacman Anahtarlarını Yenile")
       clear
       sudo pacman-key --refresh-keys
-      nextitem="Remove db.lck"
+      nextitem="Pacman Kilit Dosyasını Kaldır"
       ;;
-    "Remove db.lck")
+    "Pacman Kilit Dosyasını Kaldır")
       clear
       sudo rm /var/lib/pacman/db.lck
-      nextitem="Remove db.lck"
+      nextitem="Pacman Kilit Dosyasını Kaldır"
       ;;
     esac
 
@@ -437,95 +644,97 @@ updatemenu() {
 installmenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Drivers" ""
-    "Applications" ""
-    "Fonts" ""
-    "Themes" ""
-    "Desktop Environment" ""
-    "Display Manager" ""
+    "Sürücüler" "Grafik, ses ve diğer donanım bileşenlerinin sürücüleri"
+    "Uygulamalar" "Genel kullanıcı uygulamaları ve system araçları"
+    "Yazı Tipleri" "Font (yazı tipi) setlerinin kurulumu"
+    "Temalar" "Tema, ikon ve imleç setlerinin kurulumu"
+    "Masaüstü Ortamları" "DE (KDE, Gnome vb.) ve Pencere Yöneticisi kurulumu"
+    "Görüntü Yöneticileri" "Giriş (login) ekranı yöneticileri (GDM, SDDM, vb.)"
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Install Menu :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Kurulum Menüsü" --default-item "${nextitem}" --cancel-button "Geri" --menu "Ne kurmak istersiniz?" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Drivers")
+    "Sürücüler")
       driversmenu
-      nextitem="Applications"
+      nextitem="Uygulamalar"
       ;;
-    "Applications")
+    "Uygulamalar")
       appmenu
-      nextitem="Fonts"
+      nextitem="Yazı Tipleri"
       ;;
-    "Fonts")
+    "Yazı Tipleri")
       fonts
-      nextitem="Themes"
+      nextitem="Temalar"
       ;;
-    "Themes")
+    "Temalar")
       themes
-      nextitem="Desktop Environment"
+      nextitem="Masaüstü Ortamları"
       ;;
-    "Desktop Environment")
+    "Masaüstü Ortamları")
       demenu
-      nextitem="Display Manager"
+      nextitem="Görüntü Yöneticileri"
       ;;
-    "Display Manager")
+    "Görüntü Yöneticileri")
       displaymanager
-      nextitem="Display Manager"
+      nextitem="Görüntü Yöneticileri"
       ;;
     esac
-
     installmenu "${nextitem}"
   fi
 }
 
+# --------------------------
+# SÜRÜCÜ MENÜLERİ
+# --------------------------
+
 driversmenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Amd" ""
-    "Nvidia" ""
-    "Nvidia VA-API" "nvidia-vaapi-driver"
-    "Asus" ""
-    "Sound" ""
-    "Mkinitcpio firmware" "(AUR)"
+    "AMD" "AMD/Radeon grafik sürücüleri ve hızlandırmalar"
+    "NVIDIA" "NVIDIA sürücüleri ve ilgili ayarlar"
+    "NVIDIA VA-API" "NVIDIA video hızlandırma (VA-API) desteği"
+    "ASUS" "ROG/TUF laptop araçları (asusctl, supergfxctl, vb.)"
+    "Ses Sistemi" "Pipewire, Wireplumber ve ilgili ses araçları"
+    "mkinitcpio Firmware" "(AUR) Çekirdek ön yükleme için gerekli firmware dosyaları"
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Drivers :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Sürücüler" --default-item "${nextitem}" --cancel-button "Geri" --menu "Sürücü seçimi yapın:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Amd")
+    "AMD")
       amddriver
-      nextitem="Nvidia"
+      nextitem="NVIDIA"
       ;;
-    "Nvidia")
+    "NVIDIA")
       nvidiadriver
-      nextitem="Nvidia VA-API"
+      nextitem="NVIDIA VA-API"
       ;;
-    "Nvidia VA-API")
+    "NVIDIA VA-API")
       nvidia_vaapi
-      nextitem="Asus"
+      nextitem="ASUS"
       ;;
-    "Asus")
+    "ASUS")
       asusdriver
-      nextitem="Sound"
+      nextitem="Ses Sistemi"
       ;;
-    "Sound")
+    "Ses Sistemi")
       sounddriver
-      nextitem="Mkinitcpio firmware"
+      nextitem="mkinitcpio Firmware"
       ;;
-    "Mkinitcpio firmware")
-      if confirm "\nDo you want to install firmware?" "" 8 60; then
+    "mkinitcpio Firmware")
+      if confirm "\nFirmware kurulsun mu?" "" 8 60; then
         clear
         instpkg "" mkinitcpio-firmware
         pressanykey
       fi
-      nextitem="Mkinitcpio firmware"
+      nextitem="mkinitcpio Firmware"
       ;;
     esac
-
     driversmenu "${nextitem}"
   fi
 }
@@ -544,7 +753,7 @@ amddriver() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Amd :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "AMD/Radeon Sürücüleri" --cancel-button "Geri" --checklist "Paketleri seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -556,8 +765,8 @@ amddriver() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qs mesa &>/dev/null; then
-      if confirm "\nDo you want to apply necessary modules?" "" 8 60; then
+    if pacman -Qq mesa &>/dev/null; then
+      if confirm "\nGerekli çekirdek modülleri uygulansın mı?" "" 8 60; then
         clear
         configure_amd_modules
       fi
@@ -578,11 +787,10 @@ configure_amd_modules() {
     local newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
     sudo sed -i "s/MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/" /etc/mkinitcpio.conf
   else
-    echo "$gpumodule -  Related modules are already exist..."
+    echo "$gpumodule - İlgili modüller zaten mevcut..."
     pressanykey
   fi
 
-  # Regenerate kernel image
   sudo mkinitcpio -P
 }
 
@@ -590,9 +798,9 @@ nvidiadriver() {
   local options=(
     "nvidia" "" off
     "nvidia-lts" "" off
-    "nvidia-dkms" "" on
+    "nvidia-dkms" "" off
     "nvidia-open" "" off
-    "nvidia-open-dkms" "" off
+    "nvidia-open-dkms" "" on
     "nvidia-utils" "" on
     "lib32-nvidia-utils" "" on
     "nvidia-settings" "" on
@@ -601,7 +809,7 @@ nvidiadriver() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Nvidia :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "NVIDIA Sürücüleri" --cancel-button "Geri" --checklist "Paketleri seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -613,8 +821,8 @@ nvidiadriver() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qs nvidia &>/dev/null; then
-      if confirm "\nDo you want to apply necessary modules?" "" 8 60; then
+    if pacman -Qq nvidia &>/dev/null; then
+      if confirm "\nGerekli çekirdek modülleri uygulansın mı?" "" 8 60; then
         clear
         configure_nvidia_modules
       fi
@@ -636,21 +844,18 @@ configure_nvidia_modules() {
     local newmkinitcpiomodules="${presentmkinitcpiomodules} ${gpumodule}"
     sudo sed -i "s/^MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/" /etc/mkinitcpio.conf
   else
-    echo "$gpumodule - Related modules already exist..."
+    echo "$gpumodule - İlgili modüller zaten mevcut..."
     pressanykey
   fi
 
-  # Regenerate kernel image
   sudo mkinitcpio -P
 
-  # Create /etc/modprobe.d/nvidia.conf if it doesn't exist
   if [[ ! -f /etc/modprobe.d/nvidia.conf ]]; then
     echo "options nvidia_drm modeset=1 fbdev=1" | sudo tee /etc/modprobe.d/nvidia.conf >/dev/null
     sudo mkinitcpio -P
     pressanykey
   fi
 
-  # Update /etc/kernel/cmdline
   if [[ -f /etc/kernel/cmdline ]]; then
     local presentkernelcmdline
     presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
@@ -661,7 +866,7 @@ configure_nvidia_modules() {
         echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
         sudo mkinitcpio -P
       else
-        echo "$gpukernel - Related modules already exist..."
+        echo "$gpukernel - İlgili modüller zaten mevcut..."
         pressanykey
       fi
     fi
@@ -675,7 +880,7 @@ nvidia_vaapi() {
     "ffnvcodec-headers" "" on
   )
 
-  sel=$(dialog --backtitle "$apptitle" --title "NVIDIA VA-API dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "NVIDIA VA-API Bağımlılıkları" --cancel-button "Geri" --checklist "Paketleri seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -687,7 +892,7 @@ nvidia_vaapi() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qs ffnvcodec-headers &>/dev/null; then
+    if pacman -Qq ffnvcodec-headers &>/dev/null; then
       clear
       git clone https://github.com/elFarto/nvidia-vaapi-driver.git
       cd nvidia-vaapi-driver || return
@@ -720,16 +925,16 @@ asusdriver() {
   else
     options=(
       "asusctl" "(AUR)" on
-      "power-profiles-daemon" "(AUR)" on
+      "power-profiles-daemon" "" on
       "supergfxctl" "(AUR)" on
-      "switcheroo-control" "(AUR)" on
+      "switcheroo-control" "" on
       "rog-control-center" "(AUR)" on
       "brightnessctl" "" on
     )
   fi
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Asus :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "ASUS ROG/TUF Araçları" --cancel-button "Geri" --checklist "Paketleri seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg=""
@@ -752,10 +957,8 @@ asusdriver() {
       fi
     done
 
-    # Install selected packages
     instpkg "$pkg" "$aurpkg"
 
-    # Enable necessary services
     serviceenable power-profiles-daemon
     serviceenable supergfxd
     serviceenable switcheroo-control
@@ -777,7 +980,7 @@ sounddriver() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Sound :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Ses Sistemi (Pipewire)" --cancel-button "Geri" --checklist "Paketleri seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -789,88 +992,96 @@ sounddriver() {
       esac
     done
 
-    # Install selected packages
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-appmenu() {
+# --------------------------
+# UYGULAMA MENÜLERİ (Detaylı ve Kapsamlı)
+# --------------------------
+
+# Gerekli varsayımlar: Betiğin başında `apptitle` değişkeni tanımlanmış olmalıdır (örn: declare -g apptitle="Arch Linux Uygulama Kurulumu").
+# Ayrıca, confirm, message, instpkg, choosepkg, serviceenable gibi yardımcı fonksiyonların tanımlı olduğu varsayılmıştır.
+
+# Ana Uygulama Menüsü
+menu_main_applications() {
   local nextitem="${1:-.}"
   local options=(
-    "Console" ""
-    "Compression tools" ""
-    "Programming" ""
-    "File systems" ""
+    "Konsol" ""
+    "Sıkıştırma araçları" ""
+    "Programlama" ""
+    "Dosya sistemleri" ""
     "System" ""
-    "Internet" ""
-    "Common applications" ""
-    "File browsers" ""
-    "Multimedia" ""
-    "Theme Engine" ""
-    "Games" ""
-    "Other" ""
+    "İnternet" ""
+    "Ortak uygulamalar" ""
+    "Dosya gezginleri" ""
+    "Multimedya" ""
+    "Tema Motoru" ""
+    "Oyunlar" ""
+    "Diğer" ""
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Applications :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Uygulamalar :" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Console")
-      consoleapps
-      nextitem="Compression tools"
+    "Konsol")
+      console_apps
+      nextitem="Sıkıştırma araçları"
       ;;
-    "Compression tools")
-      compressionapps
-      nextitem="Programming"
+    "Sıkıştırma araçları")
+      compression_tools
+      nextitem="Programlama"
       ;;
-    "Programming")
-      programmingapps
-      nextitem="File systems"
+    "Programlama")
+      programming_tools
+      nextitem="Dosya sistemleri"
       ;;
-    "File systems")
-      filesystemsapps
+    "Dosya sistemleri")
+      filesystem_tools
       nextitem="System"
       ;;
     "System")
-      systemapps
-      nextitem="Internet"
+      system_apps
+      nextitem="İnternet"
       ;;
-    "Internet")
-      internetapps
-      nextitem="Common applications"
+    "İnternet")
+      internet_apps
+      nextitem="Ortak uygulamalar"
       ;;
-    "Common applications")
-      commonapps
-      nextitem="File browsers"
+    "Ortak uygulamalar")
+      common_apps
+      nextitem="Dosya gezginleri"
       ;;
-    "File browsers")
-      filebrowsersapps
-      nextitem="Multimedia"
+    "Dosya gezginleri")
+      file_browsers
+      nextitem="Multimedya"
       ;;
-    "Multimedia")
-      multimediaapps
-      nextitem="Theme Engine"
+    "Multimedya")
+      multimedia_apps
+      nextitem="Tema Motoru"
       ;;
-    "Theme Engine")
-      themeengine
-      nextitem="Games"
+    "Tema Motoru")
+      theme_engines
+      nextitem="Oyunlar"
       ;;
-    "Games")
-      gameapps
-      nextitem="Other"
+    "Oyunlar")
+      game_launchers
+      nextitem="Diğer"
       ;;
-    "Other")
-      otherapps
-      nextitem="Other"
+    "Diğer")
+      other_apps
+      nextitem="Diğer"
       ;;
     esac
 
-    appmenu "${nextitem}"
+    menu_main_applications "${nextitem}"
   fi
 }
 
-consoleapps() {
+# --- Konsol Uygulamaları Seçimi ---
+console_apps() {
   local options=(
     "cmatrix" "" off
     "cmatrix-neo-git" "" off
@@ -880,11 +1091,9 @@ consoleapps() {
     "mlocate" "" on
     "fd" "" on
     "ripgrep" "" on
-    "btop" "" off
-    "btop-no-gpu" "" on
+    "btop" "" on
     "nvtop" "" on
     "bat" "" on
-    "psutils" "" on
     "xsel" "" on
     "xclip" "" off
     "wl-clipboard" "" on
@@ -893,7 +1102,7 @@ consoleapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Console applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Konsol uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -901,17 +1110,17 @@ consoleapps() {
       item=$(echo "$item" | tr -d '"')
       case $item in
       "cmatrix-neo-git") aurpkg="$aurpkg $item" ;;
-      "btop-no-gpu") aurpkg="$aurpkg $item" ;;
       *) pkg="$pkg $item" ;;
       esac
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-compressionapps() {
+# --- Sıkıştırma Araçları Seçimi ---
+compression_tools() {
   local options=(
     "tar" "" off
     "zip" "" off
@@ -922,22 +1131,22 @@ compressionapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Compression tools :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Sıkıştırma araçları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      # aurpkg="$aurpkg $item"
       pkg="$pkg $item"
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-programmingapps() {
+# --- Programlama Araçları Seçimi ---
+programming_tools() {
   local options=(
     # Python
     "python" "" on
@@ -945,7 +1154,7 @@ programmingapps() {
     "python-pipx" "" on
     "python-psutil" "" on
     "python-requests" "" on
-    # others
+    # Diğerleri
     "go" "" on
     "go-tools" "" on
     "codespell" "" on
@@ -963,22 +1172,22 @@ programmingapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Programming language :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Programlama dilleri ve araçları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      # aurpkg="$aurpkg $item"
       pkg="$pkg $item"
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-filesystemsapps() {
+# --- Dosya Sistemleri Araçları Seçimi ---
+filesystem_tools() {
   local options=(
     "gvfs" "" on
     "gvfs-mtp" "" on
@@ -988,49 +1197,49 @@ filesystemsapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "File systems :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Dosya sistemleri araçları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      # aurpkg="$aurpkg $item"
       pkg="$pkg $item"
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-systemapps() {
+# --- System Uygulamaları Seçimi ---
+system_apps() {
   local options=(
     "gnome-disk-utility" "" on
-    "gparted" "(GTK) Partitions manager" off
+    "gparted" "(GTK) Disk bölme yöneticisi" off
     "acpi" "" on
     "acpi_call-dkms" "" on
     "lm_sensors" "" on
     "lib32-lm_sensors" "" on
-    "os-prober" "Detect OS for multi-boot (grub)" off
+    "os-prober" "Çoklu önyükleme için OS tespiti (grub)" off
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "System applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "System uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      # aurpkg="$aurpkg $item"
       pkg="$pkg $item"
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-internetapps() {
+# --- İnternet Uygulamaları Seçimi ---
+internet_apps() {
   local options=(
     "firefox" "" off
     "thunderbird" "" off
@@ -1042,7 +1251,7 @@ internetapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Internet applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "İnternet uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" = 0 ]]; then
     local pkg="" aurpkg=""
@@ -1054,10 +1263,10 @@ internetapps() {
       esac
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
 
-    # Install additionally packages
+    # Ek paketleri kur (dil paketleri)
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
@@ -1068,16 +1277,19 @@ internetapps() {
   fi
 }
 
-commonapps() {
+# --- Ortak Uygulamalar Seçimi ---
+common_apps() {
   local options=(
     "libreoffice-fresh" "" off
     "libreoffice-still" "" off
+    "openrgb" "" on
+    "solaar" "Logitech fare desteği" on
     "waydroid" "(AUR)" on
     "waydroid-helper" "(AUR)" on
     "kate" "" on
     "mousepad" "" off
     "gnome-text-editor" "" off
-    "bleachbit" "Profile cleaner" off
+    "bleachbit" "Profil temizleyici" off
     "webapp-manager" "(AUR)" on
     "stacer-bin" "(AUR)" off
     "isomaster" "(AUR)" off
@@ -1085,12 +1297,12 @@ commonapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Common applications :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Ortak uygulamalar :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
 
-    # Process selected items
+    # Seçilen öğeleri işle
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
@@ -1101,10 +1313,10 @@ commonapps() {
       esac
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
 
-    # Install LibreOffice components
+    # LibreOffice bileşenlerini kur
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
@@ -1113,18 +1325,19 @@ commonapps() {
       esac
     done
 
-    # Handle Waydroid dependencies
+    # Waydroid bağımlılıklarını yönet
     if [[ "${sel}" == *"waydroid"* ]]; then
-      if ! pacman -Qs linux-zen &>/dev/null; then
-        if confirm "Waydroid works best with linux-zen kernel.\nInstall binder_linux-dkms instead?" "" 10 60; then
-          configure_waydroid_settings
+      if ! pacman -Qq linux-zen &>/dev/null; then
+        if confirm "Waydroid en iyi linux-zen çekirdeği ile çalışır.\nBunun yerine binder_linux-dkms kurulsun mu?" "" 10 60; then
+          config_waydroid_dependencies
         fi
       fi
     fi
   fi
 }
 
-configure_waydroid_settings() {
+# --- Waydroid Bağımlılık Yapılandırması (Fonksiyon Adı Korundu) ---
+config_waydroid_dependencies() {
   local options=(
     "binder_linux-dkms" "(AUR)" on
     "python-pyclip" "(AUR)" on
@@ -1132,7 +1345,7 @@ configure_waydroid_settings() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Waydroid dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Waydroid bağımlılıkları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -1147,10 +1360,10 @@ configure_waydroid_settings() {
       esac
     done
 
-    # Install selected packages
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
 
-    # Update kernel cmdline
+    # Çekirdek komut satırını güncelle
     local presentkernelcmdline
     presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
 
@@ -1159,14 +1372,15 @@ configure_waydroid_settings() {
       echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
       sudo mkinitcpio -P
       serviceenable waydroid-container
-      message "Waydroid installed successfully.\nReboot before running!" "" 8 60
+      message "Waydroid başarıyla kuruldu.\nÇalıştırmadan önce yeniden başlatın!" "" 8 60
     else
-      message "Binder modules already exist in kernel cmdline." "" 8 60
+      message "Binder modülleri çekirdek komut satırında zaten mevcut." "" 8 60
     fi
   fi
 }
 
-filebrowsersapps() {
+# --- Dosya Gezginleri Seçimi ---
+file_browsers() {
   local options
   options=(
     "archlinux-xdg-menu" "" on
@@ -1185,14 +1399,13 @@ filebrowsersapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "File browsers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Dosya gezginleri :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $item" ;;
       "thunar-shares-plugin") aurpkg="$aurpkg $item" ;;
       *) pkg="$pkg $item" ;;
       esac
@@ -1214,14 +1427,11 @@ filebrowsersapps() {
         "perl-image-exiftool" "" on
       )
 
-      sel=$(dialog --backtitle "$apptitle" --title "Yazi dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+      sel=$(dialog --backtitle "$apptitle" --title "Yazi bağımlılıkları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
       for item in $sel; do
         item=$(echo "$item" | tr -d '"')
-        case $item in
-        # "") aurpkg="$aurpkg $item" ;;
-        *) pkg="$pkg $item" ;;
-        esac
+        pkg="$pkg $item"
       done
 
       instpkg "$pkg" "$aurpkg"
@@ -1229,7 +1439,8 @@ filebrowsersapps() {
   fi
 }
 
-multimediaapps() {
+# --- Multimedya Uygulamaları Seçimi ---
+multimedia_apps() {
   local options=(
     "smplayer" "" off
     "smplayer-skins" "" off
@@ -1245,22 +1456,21 @@ multimediaapps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Multimedia firmware & apps :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Multimedya yazılımı ve uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
+    local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
-      esac
+      pkg="$pkg $item"
     done
 
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-themeengine() {
+# --- Tema Motorları Seçimi ---
+theme_engines() {
   local options=(
     "lxappearance" "(GTK)" off
     "nwg-look" "(GTK)" off
@@ -1268,20 +1478,18 @@ themeengine() {
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
     "qt6ct" "" off
-    # "qt5ct-kde" "(AUR)" on
     "qt6ct-kde" "(AUR)" off
-    # "darkly-qt5-git" "(AUR)" off
     "darkly-qt6-git" "(AUR)" off
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Theme Engine :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Tema Motoru :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
 
     if [[ "${sel}" == *"darkly"* ]]; then
-      darkly_theme_dependencies
+      install_darkly_deps
     fi
 
     for item in $sel; do
@@ -1298,7 +1506,8 @@ themeengine() {
   fi
 }
 
-darkly_theme_dependencies() {
+# --- Darkly Tema Bağımlılıkları Kurulumu (Fonksiyon Adı Korundu) ---
+install_darkly_deps() {
   local options=(
     "cmake" "" on
     "extra-cmake-modules" "" on
@@ -1325,37 +1534,35 @@ darkly_theme_dependencies() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "darkly dependencies :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Darkly bağımlılıkları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
-    locak pkg="" aurpkg=""
+    local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
-      esac
+      pkg="$pkg $item"
     done
 
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
-gameapps() {
+# --- Oyun Başlatıcıları Seçimi ---
+game_launchers() {
   local options=(
     "steam" "" off
     "heroic-games-launcher-bin" "(AUR)" off
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Game launchers :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Oyun başlatıcıları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "heroic-games-launcher-bin" | "suyu-bin")
+      "heroic-games-launcher-bin")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
@@ -1366,21 +1573,23 @@ gameapps() {
   fi
 }
 
-otherapps() {
+# --- Diğer Uygulamalar Ana Menüsü ---
+other_apps() {
   local options=(
     "Virt Manager" ""
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Other applications :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Diğer uygulamalar :" --cancel-button "Geri" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   case $sel in
   "Virt Manager")
-    virt_manager
+    virt_manager_packages
     ;;
   esac
 }
 
-virt_manager() {
+# --- Virt Manager Packet Seçimi ---
+virt_manager_packages() {
   local options=(
     "libvirt" "" on
     "iptables-nft" "" on
@@ -1395,56 +1604,56 @@ virt_manager() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Virt Manager :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Virt Manager paketleri :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      # aurpkg="$aurpkg $item"
       pkg="$pkg $item"
     done
 
     instpkg "$pkg" "$aurpkg"
 
-    if (pacman -Qs libvirt >/dev/null); then
-      virt_manager_configuration
+    if (pacman -Qq libvirt >/dev/null); then
+      config_virt_manager
     fi
   fi
 }
 
-virt_manager_configuration() {
+# --- Virt Manager Yapılandırması (Fonksiyon Adı Korundu) ---
+config_virt_manager() {
   clear
 
-  # Backup libvirtd.conf
+  # libvirtd.conf yedeğini al
   if [[ -f /etc/libvirt/libvirtd.conf ]]; then
     sudo cp /etc/libvirt/libvirtd.conf /etc/libvirt/libvirtd.conf.bak
   fi
-  # Configure libvirtd.conf
+  # libvirtd.conf yapılandır
   if ! grep -q "unix_sock_group = 'libvirt'" /etc/libvirt/libvirtd.conf; then
     printf "\nunix_sock_group = 'libvirt'\nunix_sock_rw_perms = '0770'\n" |
       sudo tee -a /etc/libvirt/libvirtd.conf >/dev/null
   else
-    echo "/etc/libvirt/libvirtd.conf is already modified..."
+    echo "/etc/libvirt/libvirtd.conf zaten değiştirilmiş..."
   fi
 
-  # Configure qemu.conf
+  # qemu.conf yapılandır
   if ! grep -q "user = \"$localuser\"" /etc/libvirt/qemu.conf; then
-    printf "\n# User Settings\nuser = \"%s\"\ngroup = \"%s\"\n" "$localuser" "$localuser" |
+    printf "\n# Kullanıcı Ayarları\nuser = \"%s\"\ngroup = \"%s\"\n" "$localuser" "$localuser" |
       sudo tee -a /etc/libvirt/qemu.conf >/dev/null
   else
-    echo "/etc/libvirt/qemu.conf is already modified..."
+    echo "/etc/libvirt/qemu.conf zaten değiştirilmiş..."
   fi
 
-  # Configure network.conf
+  # network.conf yapılandır
   if ! grep -q "firewall_backend=\"iptables\"" /etc/libvirt/network.conf; then
     printf "\nfirewall_backend=\"iptables\"\n" |
       sudo tee -a /etc/libvirt/network.conf >/dev/null
   else
-    echo "/etc/libvirt/network.conf is already modified..."
+    echo "/etc/libvirt/network.conf zaten değiştirilmiş..."
   fi
 
-  # Update mkinitcpio.conf
+  # mkinitcpio.conf güncelle
   local virtmodule="virtio virtio_blk virtio_pci virtio_net"
   local presentmkinitcpiomodules
   presentmkinitcpiomodules=$(grep '^MODULES=' /etc/mkinitcpio.conf | awk -F '[()]' '{print $2}')
@@ -1455,29 +1664,33 @@ virt_manager_configuration() {
     local newmkinitcpiomodules="${presentmkinitcpiomodules} ${virtmodule}"
     sudo sed -i "s/^MODULES=(${presentmkinitcpiomodules})/MODULES=(${newmkinitcpiomodules})/" /etc/mkinitcpio.conf
   else
-    echo "$virtmodule - Related modules already exist..."
+    echo "$virtmodule - İlgili modüller zaten mevcut..."
   fi
 
-  # Create groups if they don't exist
+  # Grupları mevcut değilse oluştur
   for group in libvirt kvm; do
     if ! getent group "$group" >/dev/null; then
-      sudo groupadd "$group"
+      sudo groupadd -f "$group" 2>/dev/null
     fi
   done
 
-  # Configure default network
+  # Varsayılan ağı yapılandır
   sudo virsh net-autostart default
   sudo virsh net-start default
 
-  # Add user to groups
+  # Kullanıcıyı gruplara ekle
   sudo usermod -aG kvm,libvirt "$localuser"
 
-  # Enable services
+  # Servisleri etkinleştir
   serviceenable libvirtd.service
   serviceenable virtlogd.service
 
   pressanykey
 }
+
+# --------------------------
+# FONT, TEMA, DE VE DM MENÜLERİ
+# --------------------------
 
 fonts() {
   local options=(
@@ -1491,7 +1704,7 @@ fonts() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Fonts :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Yazı Tipleri" --cancel-button "Geri" --checklist "Paketleri seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -1502,7 +1715,6 @@ fonts() {
       *) pkg="$pkg $item" ;;
       esac
     done
-
     instpkg "$pkg" "$aurpkg"
   fi
 }
@@ -1516,24 +1728,19 @@ themes() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Themes :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Temalar" --default-item "${nextitem}" --cancel-button "Geri" --menu "Seçim yapın:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case $sel in
     "Qogir icon theme")
       clear
-      git clone https://github.com/vinceliuice/Qogir-icon-theme.git
-      sh Qogir-icon-theme/install.sh
-      rm -rf Qogir-icon-theme
+      instpkg "" "qogir-icon-theme"
       pressanykey
       nextitem="Tokyonight GTK theme"
       ;;
     "Tokyonight GTK theme")
       clear
-      git clone https://github.com/Fausto-Korpsvart/Tokyonight-GTK-Theme.git
-      instpkg "gtk-engine-murrine" ""
-      sh Tokyonight-GTK-Theme/themes/install.sh -l
-      rm -rf Tokyonight-GTK-Theme
+      instpkg "" "tokyonight-gtk-theme-git"
       pressanykey
       nextitem="Mocu xcursor"
       ;;
@@ -1550,9 +1757,9 @@ themes() {
 demenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Hyprland" ""
-    "KDE/Plasma" ""
-    "Gnome" ""
+    "Hyprland" "Popüler döşemeli pencere yöneticisi"
+    "Plasma" "KDE Plasma Masaüstü Ortamı"
+    "Gnome" "GNOME Masaüstü Ortamı"
   )
 
   local sel
@@ -1562,9 +1769,9 @@ demenu() {
     case $sel in
     "Hyprland")
       hyprland
-      nextitem="KDE/Plasma"
+      nextitem="Plasma"
       ;;
-    "KDE/Plasma")
+    "Plasma")
       plasma
       nextitem="Gnome"
       ;;
@@ -1590,7 +1797,11 @@ hyprland() {
     "qt5-wayland" "" on
     "qt6-wayland" "" on
     "kitty" "" on
-    "rofi-wayland" "" on
+    "rofi" "" on
+    "walker" "(AUR)" off
+    "elephant" "(AUR)" off
+    "elephant-desktopapplications" "(AUR)" off
+    "elephant-archlinuxpkgs" "(AUR)" off
     "waybar" "" on
     "waybar-updates" "(AUR)" on
     "wleave-git" "(AUR)" off
@@ -1607,160 +1818,161 @@ hyprland() {
     "playerctl" "" on
     "pamixer" "" on
     "pavucontrol" "" on
-    "blueberry" "" on
-    "iwdgui" "(AUR)" off
-    "iwgtk" "(AUR)" off
+    "bluetui" "" on
+    "impala" "TUI for iwd" on
+    "brightnessctl" "" off
+    "ddcci-driver-linux-dkms-git" "Harici monitor için" off
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Hyprland :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Hyprland" --cancel-button "Geri" --checklist "Paketleri seçin:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "wleave-git" | "wlogout" | "iwdgui" | "iwgtk" | "waybar-updates")
+      "walker" | "elephant" | "elephant-desktopapplications" | "elephant-archlinuxpkgs" | "wleave-git" | "wlogout" | "waybar-updates")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
       esac
     done
-
     instpkg "$pkg" "$aurpkg"
+
+    if [[ "$sel" == *"ddcci-driver-linux-dkms-git"* ]] && pacman -Qq ddcci-driver-linux-dkms-git >/dev/null; then
+      if confirm "\nDDCI ayarlarını uygulamak ister misiniz? \nBazı masaüstü bilgisayarlarda uygulanması gerekir. \nDaha sonra Config menüsünden uygulanabilir. " "" 10 60; then
+        ddci-setup
+      fi
+    fi
   fi
 }
 
 plasma() {
   local options=(
-    "plasma" "" on
-    "plasma-wayland-protocols" "" on
-    "ark" "" on
-    "dolphin" "" on
-    "dolphin-plugins" "" on
-    "ffmpegthumbs" "" on
-    "gwenview" "" on
-    "kalzium" "" off
-    "kate" "" on
-    "kcharselect" "" on
-    "kcolorchooser" "" on
-    "kdeconnect" "" on
-    "kdegraphics-thumbnailers" "" on
-    "kdenetwork-filesharing" "" on
-    "kdesdk-thumbnailers" "" on
-    "kdialog" "" on
-    "kfind" "" on
-    "kio-extras" "" on
-    "kio-gdrive" "" on
-    "kolourpaint" "" on
-    "konsole" "" on
-    "ksystemlog" "" on
-    "ktouch" "" on
-    "lokalize" "" on
-    "okular" "" on
-    "print-manager" "" on
-    "spectacle" "" on
-    "kdiskmark" "" on
-    "packagekit" "" on
-    "packagekit-qt5" "" on
-    "latte-dock" "" off
-    "latte-dock-git" "(AUR)" off
-    "plasma5-applets-virtual-desktop-bar-git" "(AUR)" off
-    "plasma5-applets-window-appmenu-git" "(AUR)" off
-    "sddm-conf-git" "(AUR)" off
+    "plasma" "Plasma Masaüstü Ortamı (Temel)" on
+    "plasma-wayland-protocols" "Wayland için gerekli protokoller" on
+    "ark" "Arşiv yöneticisi (zip, rar, 7z vb.)" on
+    "dolphin" "Varsayılan dosya yöneticisi" on
+    "dolphin-plugins" "Dolphin eklentileri" on
+    "ffmpegthumbs" "Video küçük resim önizlemeleri" on
+    "gwenview" "Görüntüleyici" on
+    "kalzium" "Periyodik tablo (Eğitim)" off
+    "kate" "Gelişmiş metin düzenleyici" on
+    "kcharselect" "Özel karakter seçici" on
+    "kcolorchooser" "Renk seçici (Color Picker)" on
+    "kdeconnect" "Cihaz entegrasyonu (Telefon/PC)" on
+    "kdegraphics-thumbnailers" "Grafik küçük resim önizlemeleri" on
+    "kdenetwork-filesharing" "Ağda dosya paylaşımı" on
+    "kdesdk-thumbnailers" "SDK ile ilgili küçük resim önizlemeleri" on
+    "kdialog" "KDE/Plasma diyalog araçları" on
+    "kfind" "Gelişmiş dosya arama aracı" on
+    "kio-extras" "Ek KIO eklentileri (ağ/uzak dosya sistemleri)" on
+    "kio-gdrive" "Google Drive entegrasyonu" on
+    "kolourpaint" "Basit boyama programı" on
+    "konsole" "Terminal emülatörü" on
+    "ksystemlog" "System kayıtlarını görüntüleyici" on
+    "ktouch" "On Parmak Yazma Eğitimi" off
+    "lokalize" "Çeviri / Yerelleştirme aracı" off
+    "okular" "Belge görüntüleyici (PDF, EPUB vb.)" on
+    "print-manager" "Yazdırma yöneticisi" on
+    "spectacle" "Ekran görüntüsü aracı" on
+    "kdiskmark" "Disk performans test aracı" on
+    "plasma-discover" "Grafiksel packet yöneticisi (Uygulama Mağazası)" on
+    "discover-notifier" "Discover bildirim aracı" on
+    # Latte Dock paketleri (latte-dock ve latte-dock-git) güncel olmadığı için listeden çıkarıldı.
+    "plasma5-applets-virtual-desktop-bar-git" "(AUR) Sanal Masaüstü Çubuğu" off
+    "plasma5-applets-window-appmenu-git" "(AUR) Pencere Uygulama Menüsü" off
+    "sddm-conf-git" "(AUR) SDDM konfigürasyon aracı" off
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "KDE/Plasma :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "KDE Plasma Uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "latte-dock-git" | "plasma5-applets-virtual-desktop-bar-git" | "plasma5-applets-window-appmenu-git" | "sddm-conf-git")
+      "plasma5-applets-virtual-desktop-bar-git" | "plasma5-applets-window-appmenu-git" | "sddm-conf-git")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
       esac
     done
 
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 gnome() {
   local options=(
-    "baobab" "" on
-    "eog" "" on
-    "evince" "" on
-    "file-roller" "" on
-    "gedit" "" on
-    "gnome-backgrounds" "" on
-    "gnome-calculator" "" on
-    "gnome-calendar" "" on
-    "gnome-characters" "" on
-    "gnome-color-manager" "" on
-    "gnome-control-center" "" on
-    "gnome-disk-utility" "" on
-    "gnome-font-viewer" "" on
-    "gnome-keyring" "" on
-    "gnome-logs" "" on
-    "gnome-menus" "" on
-    "gnome-photos" "" on
-    "gnome-remote-desktop" "" on
-    "gnome-session" "" on
-    "gnome-settings-daemon" "" on
-    "gnome-shell" "" on
-    "gnome-shell-extensions" "" on
-    "gnome-terminal" "" on
-    "gnome-software" "" on
-    "gnome-themes-extra" "" on
-    "gnome-user-docs" "" on
-    "gnome-user-share" "" on
-    "grilo-plugins" "" on
-    "mutter" "" on
-    "nautilus" "" on
-    "sushi" "" on
-    "localsearch" "" on
-    "xdg-user-dirs-gtk" "" on
-    "gnome-tweaks" "" on
-    "gnome-sudoku" "" on
-    "gnome-sound-recorder" "" on
-    "gnome-nettool" "" on
-    "gnome-mines" "" on
-    "gnome-mahjongg" "" on
-    "gnome-chess" "" on
-    "ghex" "" on
-    "gnome-packagekit" "" on
-    "packagekit" "" on
+    "gnome-shell" "GNOME Masaüstü Kabuğu" on
+    "mutter" "Pencere Yöneticisi ve Besteci" on
+    "gnome-control-center" "Ayarlar Uygulaması" on
+    "nautilus" "Dosya Yöneticisi" on
+    "gnome-terminal" "Terminal Emülatörü" on
+    "gnome-text-editor" "Modern Metin Düzenleyici (gedit yerine)" on
+    "gnome-software" "Grafiksel packet yöneticisi (Uygulama Mağazası)" on
+    "gnome-tweaks" "Ek GNOME ayar aracı" on
+    "gnome-shell-extensions" "Kabuk uzantıları" on
+    "gnome-keyring" "Şifre ve anahtar yöneticisi" on
+    "gnome-disk-utility" "Disk ve bölümleme aracı" on
+    "gnome-calculator" "Hesap makinesi" on
+    "evince" "Belge görüntüleyici (PDF, EPUB vb.)" on
+    "file-roller" "Arşiv yöneticisi (zip, rar vb.)" on
+    "eog" "Görüntüleyici (Eye of GNOME)" on
+    "sushi" "Nautilus için dosya önizleme" on
+    "xdg-user-dirs-gtk" "Kullanıcı dizinlerini oluşturur (Masaüstü, İndirilenler vb.)" on
+    "baobab" "Disk kullanım analizörü" on
+    "gnome-calendar" "Takvim" on
+    "gnome-characters" "Özel karakterler" on
+    "gnome-color-manager" "Renk yönetimi" on
+    "gnome-font-viewer" "Yazı tipi görüntüleyici" on
+    "gnome-logs" "System kayıt görüntüleyicisi" on
+    "gnome-menus" "Menü sistemi" on
+    "gnome-photos" "Fotoğraf görüntüleyici ve düzenleyici" on
+    "gnome-remote-desktop" "Uzak masaüstü erişimi" on
+    "gnome-session" "GNOME oturumu" on
+    "gnome-settings-daemon" "Ayarlar arka plan hizmeti" on
+    "gnome-themes-extra" "Ek GNOME temaları" on
+    "gnome-user-docs" "Kullanıcı belgeleri" on
+    "gnome-user-share" "Kullanıcı paylaşımını etkinleştirir" on
+    "grilo-plugins" "Multimedya çerçeve eklentileri" on
+    "gnome-sudoku" "Sudoku Oyunu" off
+    "gnome-sound-recorder" "Ses kayıt aracı" off
+    "gnome-nettool" "Ağ araçları (Tercihe bağlı/Eski)" off
+    "gnome-mines" "Mayın Tarlası Oyunu" off
+    "gnome-mahjongg" "Mahjong Oyunu" off
+    "gnome-chess" "Satranç Oyunu" off
+    "ghex" "Hex Düzenleyici" off
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Gnome :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "GNOME Uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
-      case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
-      esac
+      # GNOME için AUR paketi yok, tüm seçilenler ana packet olarak işleniyor.
+      pkg="$pkg $item"
     done
 
+    # Seçilen paketleri kur
     instpkg "$pkg" "$aurpkg"
   fi
 }
 
 displaymanager() {
   local options=(
-    "gdm" "Gnome Login"
-    "sddm" "QT5 Login"
+    "gdm" "Gnome Giriş Yöneticisi"
+    "sddm" "QT5 Giriş Yöneticisi"
     "sddm-git" "(AUR)"
     "regreet" ""
-    "lxdm" "LXDE Login"
-    "lightdm-gtk-greeter" "Other Login"
+    "lxdm" "LXDE Giriş Yöneticisi"
+    "lightdm-gtk-greeter" "Diğer Giriş Yöneticisi"
   )
 
   local sel
@@ -1793,52 +2005,58 @@ displaymanager() {
       instpkg "lightdm-gtk-greeter" ""
       serviceenable lightdm
       ;;
-    "lightdm-kde-greeter")
-      instpkg "lightdm-kde-greeter" ""
-      serviceenable lightdm
-      ;;
     esac
   fi
 }
 
 regreet_configuration() {
-  # Create greetd directory
   sudo mkdir -p /etc/greetd
-  # Create config file
+
   printf "%s\n" "[terminal]" "vt = 1" "" "[default_session]" "command = \"Hyprland --config /home/"$localuser"/.config/regreet/hyprland.conf\"" "user = \"$localuser\"" | sudo tee /etc/greetd/config.toml >/dev/null
-  # Add user group
+
   sudo usermod -a -G video "$localuser"
   sudo chown "$localuser":"$localuser" /etc/greetd
 }
 
+# --------------------------
+# KONFİGÜRASYON MENÜLERİ
+# --------------------------
+
+# Yapılandırma Ana Menüsü
 configmenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Dotfiles" ""
-    "Swap file configs" "systemd-boot kernel module"
-    "Network configs" "For sharing"
+    "Dotfile'lar" "Kullanıcı yapılandırma dosyaları"
+    "Takas Dosyası Yapılandırması" "Hazırda bekletme (hibernation) için çekirdek modülü ayarı (systemd-boot)"
+    "Ağ Yapılandırması" "Dosya paylaşımı ve keşif ayarları"
+    "DDCCI Sürücü Kurulumu" "DDCCI ayarları"
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Config Menu" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Yapılandırma Menüsü" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" = "0" ]]; then
     case ${sel} in
-    "Dotfiles")
+    "Dotfile'lar")
       dotfilesmenu
-      nextitem="Swap file configs"
+      nextitem="Takas Dosyası Yapılandırması"
       ;;
-    "Swap file configs")
-      if confirm "\nDo you want to apply kernel module for hibernation ? \nOnly for systemd-boot loader!!! \n " "" 10 60; then
+    "Takas Dosyası Yapılandırması")
+      if confirm "\nHazırda bekletme (hibernation) için çekirdek modülünü uygulamak istiyor musunuz? \nSadece systemd-boot önyükleyicisi için geçerlidir!!! \n " "" 10 60; then
         swap_file_config
       else
-        message "\nNo changes have been made !" "" 6 40
+        message "\nHerhangi bir değişiklik yapılmadı!" "" 6 40
       fi
-      nextitem="Network configs"
+      nextitem="Ağ Yapılandırması"
       ;;
-    "Network configs")
+    "Ağ Yapılandırması")
       network_config
-      nextitem="Network configs"
+      nextitem="DDCCI Sürücü Kurulumu"
+      ;;
+    "DDCCI Sürücü Kurulumu")
+      if confirm "\nDDCCI sürücüsü için gerekli ayarları uygulamak istiyor musunuz? \n " "" 10 65; then
+        ddci-setup
+      fi
       ;;
     esac
 
@@ -1846,71 +2064,73 @@ configmenu() {
   fi
 }
 
+# Takas Dosyası Hazırda Bekletme Ayarları
 swap_file_config() {
   clear
 
-  # Check if swapfile exists and is active
+  # Takas dosyasının varlığını ve aktifliğini kontrol et
   if [[ ! -f /swapfile ]] || ! swapon --show=name | grep -q "/swapfile"; then
-    echo "Error: /swapfile not found or not active. Create and activate it first."
+    echo "Hata: /swapfile bulunamadı veya aktif değil. Önce oluşturun ve etkinleştirin."
     return 1
   fi
 
-  # Verify required tools are installed
+  # Gerekli araçların kurulu olduğunu doğrula
   if ! command -v filefrag >/dev/null; then
-    echo "Installing required tools (e2fsprogs)..."
+    echo "Gerekli araçlar kuruluyor (e2fsprogs)..."
     sudo pacman -S e2fsprogs --noconfirm || return 1
   fi
 
-  # Get swapfile details safely
+  # Takas dosyası detaylarını güvenli bir şekilde al
   local swapfileuuid swapfileoffset
   swapfileuuid=$(findmnt -no UUID -T /swapfile 2>/dev/null) || {
-    echo "Error: Failed to get swapfile UUID"
+    echo "Hata: Takas dosyası UUID'si alınamadı"
     return 1
   }
   swapfileoffset=$(sudo filefrag -v /swapfile | awk '$1=="0:" {print $4}' | tr -d '.') || {
-    echo "Error: Failed to get swapfile offset"
+    echo "Hata: Takas dosyası ofseti alınamadı"
     return 1
   }
 
-  # Verify obtained values
+  # Alınan değerleri doğrula
   if [[ -z "$swapfileuuid" || -z "$swapfileoffset" ]]; then
-    echo "Error: Could not determine swapfile parameters"
+    echo "Hata: Takas dosyası parametreleri belirlenemedi"
     return 1
   fi
 
-  # Kernel cmdline configuration
+  # Çekirdek komut satırı yapılandırması
   local presentkernelcmdline newkernelcmdline
   presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
   local resume_params="resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
 
   if ! grep -Pq "resume=UUID=\S+\s+resume_offset=\d+" <<<"$presentkernelcmdline"; then
-    # Clean existing resume params if any
+    # Varsa mevcut bekleme parametrelerini temizle
     newkernelcmdline=$(sed -E 's/\s*resume=[^ ]+//g;s/\s*resume_offset=[^ ]+//g' <<<"$presentkernelcmdline")
     newkernelcmdline="$newkernelcmdline $resume_params"
     echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
     sudo mkinitcpio -P
   else
-    message "Hibernation parameters already exist in cmdline:\n$(grep -Po 'resume=.*?(\s|$)' <<<"$presentkernelcmdline")"
+    message "Hazırda bekletme parametreleri zaten cmdline'da mevcut:\n$(grep -Po 'resume=.*?(\s|$)' <<<"$presentkernelcmdline")"
   fi
 
-  # mkinitcpio hooks configuration
+  # mkinitcpio kanca (hook) yapılandırması
   local mkinitfile="/etc/mkinitcpio.conf"
   if ! grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
+    # 'resume' kancasını 'fsck' kancasından önce ekle (veya varsa 'filesystems' kancasından sonra ekleyin)
     sudo sed -i '/^HOOKS=(/ s/\<fsck\>/resume &/' "$mkinitfile"
     sudo mkinitcpio -P
   else
-    echo "Resume hook already exists in mkinitcpio.conf"
+    echo "Resume kancası zaten mkinitcpio.conf'ta mevcut"
   fi
 
-  # Final verification
+  # Son doğrulama
   if grep -q "$resume_params" /etc/kernel/cmdline &&
     grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
-    message "Swapfile configured successfully for hibernation!\n\nYou need to reboot to apply changes."
+    message "Takas dosyası hazırda bekletme için başarıyla yapılandırıldı!\n\nDeğişikliklerin uygulanması için yeniden başlatmanız gerekiyor."
   else
-    echo "Error: Configuration might have failed. Please verify manually:"
-    echo "- /etc/kernel/cmdline contents:"
+    echo "Hata: Yapılandırma başarısız olmuş olabilir. Lütfen manuel olarak doğrulayın:"
+    echo "- /etc/kernel/cmdline içeriği:"
     cat /etc/kernel/cmdline
-    echo -e "\n- mkinitcpio hooks:"
+    echo -e "\n- mkinitcpio kancaları:"
     grep '^HOOKS=' "$mkinitfile"
     return 1
   fi
@@ -1918,14 +2138,15 @@ swap_file_config() {
   pressanykey
 }
 
+# Ağ Paylaşım Yapılandırması
 network_config() {
   local options=(
-    "samba" "" on
-    "avahi" "" on
+    "samba" "Windows/Linux/macOS Dosya Paylaşımı" on
+    "avahi" "Ağ Hizmetleri Keşfi (mDNS/Zeroconf)" on
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Network :" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Ağ Yapılandırması :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq "0" ]]; then
     local pkg="" aurpkg=""
@@ -1939,16 +2160,16 @@ network_config() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qs samba >/dev/null; then
+    if pacman -Qq samba >/dev/null; then
       clear
 
-      # Backup samba config
+      # Samba yapılandırmasını yedekle
       if [[ -f /etc/samba/smb.conf ]]; then
         sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
       fi
 
-      # Create Samba configuration with safer defaults
-      sudo mkdir -p /etc/samba # Ensure directory exists
+      # Daha güvenli varsayılanlarla Samba yapılandırması oluştur
+      sudo mkdir -p /etc/samba # Dizin varlığını sağla
       printf "%s\n" \
         "[global]" \
         "workgroup = WORKGROUP" \
@@ -1965,200 +2186,202 @@ network_config() {
         "fruit:metadata = stream" \
         "fruit:model = Macintosh" | sudo tee /etc/samba/smb.conf >/dev/null
 
-      # Create usershare directory
+      # usershare dizini oluştur
       sudo mkdir -p /var/lib/samba/usershares
       sudo chown root:sambashare /var/lib/samba/usershares
       sudo chmod 1770 /var/lib/samba/usershares
 
-      # Configure sambashare group
+      # sambashare grubunu yapılandır
       if ! getent group sambashare >/dev/null; then
         sudo groupadd -r sambashare
       fi
       sudo gpasswd -a "$localuser" sambashare
 
-      # Restart services
+      # Servisleri yeniden başlat
       sudo systemctl restart smb.service nmb.service
 
-      # Set Samba password interactively
-      echo "Set a password for Samba user $localuser:"
+      # Etkileşimli olarak Samba parolası belirle
+      echo "Samba kullanıcısı $localuser için bir parola belirleyin:"
       sudo smbpasswd -a "$localuser"
 
-      # Enable core services
+      # Ana servisleri etkinleştir
       serviceenable smb
       serviceenable nmb
     fi
 
-    # Conditionally enable Avahi
-    if [[ "$sel" == *"avahi"* ]] && pacman -Qs avahi >/dev/null; then
+    # Avahi'yi koşullu olarak etkinleştir
+    if [[ "$sel" == *"avahi"* ]] && pacman -Qq avahi >/dev/null; then
       serviceenable avahi-daemon.service
     fi
 
-    # If using firewalld
+    # firewalld kullanılıyorsa
     if command -v firewall-cmd >/dev/null; then
       sudo firewall-cmd --permanent --add-service=samba
       sudo firewall-cmd --reload
     fi
 
-    echo "Samba configuration complete. Reboot or restart services to apply changes."
+    echo "Samba yapılandırması tamamlandı. Değişikliklerin uygulanması için yeniden başlatın veya servisleri yeniden başlatın."
     pressanykey
   fi
 }
 
+# Dotfile'lar Alt Menüsü
 dotfilesmenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Manage Dotfiles" ""
-    "Neovim" ""
-    "Sddm theme" "Sugar-Candy"
-    "Wallpapers" ""
-    "KMSCON" "Virtual Console"
-    "bat cache build" ""
-    "Remove neovim dotfiles" ""
+    "Dotfile'ları Yönet" "Konfigürasyonları Kopyala/Sembolik Bağla"
+    "Neovim" "Neovim dotfile'larını ayarla"
+    "Sddm Tema" "Sugar-Candy veya başka bir SDDM temasını kur"
+    "Duvar Kağıtları" "Duvar kağıtlarını kur"
+    "KMSCON" "Sanal Konsol yapılandırmasını kur"
+    "bat önbelleğini oluştur" "bat sözdizimi önbelleğini yeniden oluştur"
+    "Neovim dotfile'larını kaldır" "nvim yapılandırmasını tamamen sil"
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Dotfiles :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 60 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Dotfile'lar :" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 60 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Manage Dotfiles")
+    "Dotfile'ları Yönet")
       manage_dotfiles
       nextitem="Neovim"
       ;;
     "Neovim")
-      neovim_dot
-      nextitem="Sddm theme"
+      neovim_dot # Fonksiyon adı korundu
+      nextitem="Sddm Tema"
       ;;
-    "Sddm theme")
-      install_sddmtheme
-      nextitem="Wallpapers"
+    "Sddm Tema")
+      install_sddmtheme # Fonksiyon adı korundu
+      nextitem="Duvar Kağıtları"
       ;;
-    "Wallpapers")
-      install_wallpapers
+    "Duvar Kağıtları")
+      install_wallpapers # Fonksiyon adı korundu
       nextitem="KMSCON"
       ;;
     "KMSCON")
-      install_kmscon
-      nextitem="Remove neovim dotfiles"
+      install_kmscon # Fonksiyon adı korundu
+      nextitem="Neovim dotfile'larını kaldır"
       ;;
-    "bat cache build")
-      # Bat cache build
+    "bat önbelleğini oluştur")
+      # Bat önbellek oluşturma
       if command -v bat >/dev/null; then
         bat cache --build >/dev/null
       fi
       ;;
-    "Remove neovim dotfiles")
-      if confirm "\nDo you want to remove nvim dotfiles ?" "" 8 60; then
+    "Neovim dotfile'larını kaldır")
+      if confirm "\nnvim dotfile'larını kaldırmak istiyor musunuz?" "" 8 60; then
         rm -rf /home/$localuser/.config/nvim
         rm -rf /home/$localuser/.local/share/nvim
         rm -rf /home/$localuser/.cache/nvim
         if [[ "$?" -eq 0 ]]; then
-          message "\nNvim dotfiles are completely removed." "" 8 60
+          message "\nNvim dotfile'ları tamamen kaldırıldı." "" 8 60
         fi
       fi
-      nextitem="Remove neovim dotfiles"
+      nextitem="Neovim dotfile'larını kaldır"
       ;;
     esac
     dotfilesmenu "${nextitem}"
   fi
 }
 
+# Dotfile'ları Kopyalama ve Sembolik Bağlama
 manage_dotfiles() {
   # --------------------------
-  # Helper Functions
+  # Yardımcı Fonksiyonlar
   # --------------------------
 
-  # Validates if managed symlinks are pointing to valid sources.
-  # $1: target_base directory (e.g., $HOME/.config)
-  # $2..n: array of managed items
+  # Yönetilen sembolik bağların geçerli kaynaklara işaret edip etmediğini doğrular.
+  # $1: hedef ana dizin (örn: $HOME/.config)
+  # $2..n: yönetilen öğeler dizisi
   validate_symlinks() {
     local target_base="$1"
     local items=("${@:2}")
     local broken_links=()
     local exit_code=0
 
-    echo "Validating managed symlinks in: $target_base"
+    echo "Yönetilen sembolik bağlar doğrulanıyor: $target_base"
 
     for item in "${items[@]}"; do
       local target="${target_base}/${item}"
 
-      # Check if the target is a symlink
+      # Hedefin bir sembolik bağ olup olmadığını kontrol et
       if [[ -L "$target" ]]; then
-        # Check if the target of the symlink exists (-e checks the existence of the link's target)
+        # Sembolik bağın hedefinin varlığını kontrol et
         if [[ ! -e "$(readlink -f "$target")" ]]; then
           broken_links+=("$target → $(readlink "$target")")
           exit_code=1
         fi
       else
-        echo "Warning: $item is not a symlink, cannot validate source existence." >&2
+        echo "Uyarı: $item bir sembolik bağ değil, kaynak varlığı doğrulanamıyor." >&2
         exit_code=1
       fi
     done
 
     if [[ ${#broken_links[@]} -gt 0 ]]; then
-      echo -e "\n❌ Found broken symlinks:"
+      echo -e "\n❌ Bozuk sembolik bağlar bulundu:"
       printf '  - %s\n' "${broken_links[@]}"
     else
-      echo -e "\n✅ All managed symlinks are valid"
+      echo -e "\n✅ Tüm yönetilen sembolik bağlar geçerli"
     fi
 
     return $exit_code
   }
 
-  # Creates a symbolic link atomically to prevent broken state if interrupted.
-  # $1: source file/directory
-  # $2: target path
+  # Kesinti durumunda bozuk durumu önlemek için sembolik bağı atomik olarak oluşturur.
+  # $1: kaynak dosya/dizin
+  # $2: hedef yol
   atomic_symlink() {
     local source="$1"
     local target="$2"
     local temp_target="${target}.newlink"
 
-    # Create the symlink to a temporary target
+    # Sembolik bağı geçici bir hedefe oluştur
     if ln -sfn "$source" "$temp_target"; then
-      # Atomically replace the old target (if any) with the new link
+      # Eski hedefi (varsa) yeni bağ ile atomik olarak değiştir
       if mv -f "$temp_target" "$target"; then
-        echo "Created: $target → $source"
+        echo "Oluşturuldu: $target → $source"
         return 0
       fi
     fi
 
-    echo "Failed to create symlink: $target" >&2
-    rm -f "$temp_target" # Clean up temporary file on failure
+    echo "Sembolik bağ oluşturulamadı: $target" >&2
+    rm -f "$temp_target" # Başarısızlıkta geçici dosyayı temizle
     return 1
   }
 
   # --------------------------
-  # Main Function Logic
+  # Ana Fonksiyon Mantığı
   # --------------------------
 
-  isrsync
-  clone_repo "dotfiles" || return 1
+  isrsync                           # rsyn'i kontrol etmeli/kurmalı
+  clone_repo "dotfiles" || return 1 # Dotfile deposunu klonlamalı
 
   local required_dirs=("config" "home")
   for dir in "${required_dirs[@]}"; do
     if [[ ! -d "${script_dir}/dotfiles/${dir}" ]]; then
-      echo "Error: Missing required directory '${dir}' in ${script_dir}/dotfiles"
+      echo "Hata: ${script_dir}/dotfiles dizininde gerekli '${dir}' dizini eksik"
       pressanykey
       return 1
     fi
   done
 
   # --------------------------
-  # Installation Processor
+  # Kurulum İşleyici
   # --------------------------
 
-  # Displays the dialog checklist for item selection.
-  # $1: Title
-  # $2: Path to scan
+  # Öğe seçimi için dialog kontrol listesini görüntüler.
+  # $1: Başlık
+  # $2: Taranacak Yol
   show_selection_dialog() {
     local title="$1"
     local path="$2"
 
     local options=()
-    # Use find with -print0 and read -d $'\0' for safe handling of filenames with spaces/special characters.
+    # Boşluk/özel karakter içeren dosya adlarını güvenli bir şekilde işlemek için find ve read kullanılır.
     while IFS= read -r -d $'\0' item; do
       local clean_name="${item##*/}"
-      options+=("$clean_name" "Configuration for $clean_name" off)
+      options+=("$clean_name" "İçin yapılandırma: $clean_name" off)
     done < <(find "$path" -mindepth 1 -maxdepth 1 \( -type d -o -type f \) -print0 | sort -zV)
 
     [[ ${#options[@]} -eq 0 ]] && return 1
@@ -2166,8 +2389,8 @@ manage_dotfiles() {
     local sel
     sel=$(dialog --backtitle "$apptitle" \
       --title "$title" \
-      --cancel-button "Back" \
-      --checklist "Choose items to sync:" \
+      --cancel-button "Geri" \
+      --checklist "Senkronize edilecek öğeleri seçin:" \
       0 0 0 \
       "${options[@]}" \
       3>&1 1>&2 2>&3)
@@ -2175,90 +2398,90 @@ manage_dotfiles() {
     echo "$sel"
   }
 
-  # Handles the installation process (Copy, Symlink, or Validate).
-  # $1: section name (e.g., "config" or "home")
-  # $2: target base path (e.g., $HOME/.config or $HOME)
+  # Kurulum sürecini yönetir (Kopyala, Sembolik Bağla veya Doğrula).
+  # $1: bölüm adı (örn: "config" veya "home")
+  # $2: hedef ana yol (örn: $HOME/.config veya $HOME)
   process_installation() {
     local section="$1"
     local target_base="$2"
     shift 2
 
-    # Unified backup configuration
-    local BACKUP_ROOT="$(xdg-user-dir DOCUMENTS)/dotfiles_backup"
+    # Birleşik yedekleme yapılandırması
+    local BACKUP_ROOT="$(xdg-user-dir DOCUMENTS)/dotfiles_yedek"
     local TIMESTAMP=$(date +%Y%m%d-%H%M%S)
     local BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
     mkdir -p "$BACKUP_DIR"
 
-    # Selection dialog
-    local sel=$(show_selection_dialog "Select ${section^} Files" "${script_dir}/dotfiles/${section}") || return 1
+    # Seçim diyalogu
+    local sel=$(show_selection_dialog "Seçilen ${section^} Dosyaları" "${script_dir}/dotfiles/${section}") || return 1
     [[ -z "$sel" ]] && return 0
 
-    # --- START: Robust selection parsing (Fixes issue with multi-selection) ---
+    # --- BAŞLANGIÇ: Sağlam seçim ayrıştırma (Çoklu seçim sorununu çözer) ---
     local selected_items=()
     local items_with_quotes=()
     local IFS_TEMP=$IFS
 
-    # 1. Use space as IFS to split the quoted dialog output into an array of quoted items
+    # 1. Tırnaklı dialog çıktısını ayırmak için boşluk (space) kullanılır.
     IFS=' '
     items_with_quotes=($sel)
-    IFS=$IFS_TEMP # Restore IFS immediately
+    IFS=$IFS_TEMP # IFS'i hemen geri yükle
 
-    # 2. Loop through and strip the surrounding quotes from each item to get clean file names
+    # 2. Her bir öğenin etrafındaki tırnakları temizle
     for item in "${items_with_quotes[@]}"; do
       local clean_item
-      # sed command to strip leading (^) and trailing ($) quotes
+      # Baştaki (^) ve sondaki ($) tırnakları kaldıran sed komutu
       clean_item=$(echo "$item" | sed 's/^"//; s/"$//')
       selected_items+=("$clean_item")
     done
-    # --- END: Robust selection parsing ---
+    # --- SON: Sağlam seçim ayrıştırma ---
 
-    # Action selection
+    # Eylem seçimi
     local response=$(dialog --backtitle "$apptitle" \
-      --title "Confirmation" \
-      --menu "Choose sync method:" \
+      --title "Onay" \
+      --menu "Senkronizasyon yöntemini seçin:" \
       0 0 0 \
-      "Copy" "Direct copy with backups" \
-      "Symlink" "Create symbolic links" \
-      "Validate" "Check existing links" \
-      "Cancel" "Abort operation" \
+      "Kopyala" "Yedeklemelerle doğrudan kopyalama" \
+      "Sembolik Bağla" "Sembolik bağlantılar oluştur" \
+      "Doğrula" "Mevcut bağlantıları kontrol et" \
+      "İptal" "İşlemi durdur" \
       3>&1 1>&2 2>&3) || return 1
 
     case $response in
-    "Copy")
+    "Kopyala")
       clear
-      echo -e "Previewing changes:\n"
+      echo -e "Değişikliklerin önizlemesi:\n"
 
-      # Use the robust array selected_items
+      # Sağlam seçili öğeler dizisini kullan
       for item in "${selected_items[@]}"; do
         local full_source="${script_dir}/dotfiles/${section}/${item}"
         local target="${target_base}/${item}"
-        local source # rsync source path, adjusted for file vs directory
+        local source # rsync kaynak yolu, dosya veya dizine göre ayarlanır
 
-        # CHECK: Adjust source path for rsync based on type (file or directory)
+        # KONTROL: Kaynak yolunu rsync için türe göre ayarla (dosya veya dizin)
         if [[ -d "$full_source" ]]; then
-          # If source is a directory, append '/' to copy *contents*
+          # Eğer kaynak bir dizin ise, *içeriği* kopyalamak için '/' ekle
           source="${full_source}/"
         else
-          # If source is a file, use path as is
+          # Eğer kaynak bir dosya ise, yolu olduğu gibi kullan
           source="$full_source"
         fi
 
         echo -e "─── $item ───"
-        # --dry-run for preview
+        # Önizleme için --dry-run
         rsync -avh --dry-run --backup --backup-dir="$BACKUP_DIR" \
           "$source" "$target" --delete
         echo
       done
       pressanykey
 
-      if confirm "Apply changes? Backup location: $BACKUP_DIR"; then
+      if confirm "Değişiklikleri uygula? Yedekleme konumu: $BACKUP_DIR"; then
         clear
         for item in "${selected_items[@]}"; do
           local full_source="${script_dir}/dotfiles/${section}/${item}"
           local target="${target_base}/${item}"
           local source
 
-          # CHECK: Adjust source path for rsync based on type
+          # KONTROL: Kaynak yolunu rsync için türe göre ayarla
           if [[ -d "$full_source" ]]; then
             source="${full_source}/"
           else
@@ -2266,12 +2489,12 @@ manage_dotfiles() {
           fi
 
           if [[ -L "$target" ]]; then
-            echo "Removing existing symlink: $target"
+            echo "Mevcut sembolik bağ kaldırılıyor: $target"
             rm -f "$target"
           fi
 
-          echo -e "Installing: $item"
-          # Actual rsync execution
+          echo -e "Kuruluyor: $item"
+          # Gerçek rsync çalıştırması
           rsync -avh --backup --backup-dir="$BACKUP_DIR" \
             "$source" "$target" --delete
         done
@@ -2279,33 +2502,33 @@ manage_dotfiles() {
       fi
       ;;
 
-    "Symlink")
+    "Sembolik Bağla")
       local dotfiles_root="${HOME}/.dotfiles"
       local managed_items=()
 
-      # Sync dotfiles repository with backup before creating symlinks
+      # Sembolik bağ oluşturmadan önce dotfiles deposunu yedekleyerek senkronize et
       if [[ ! -d "${dotfiles_root}" ]]; then
-        echo "Initializing dotfiles repository..."
-        # Sync the section directory contents to the dotfiles root.
+        echo "Dotfiles deposu başlatılıyor..."
+        # Bölüm dizini içeriklerini dotfiles kök dizinine senkronize et.
         if ! rsync -a --backup --backup-dir="${BACKUP_DIR}" \
           "${script_dir}/dotfiles/" "${dotfiles_root}/"; then
-          echo "Error: Failed to initialize dotfiles repository" >&2
+          echo "Hata: Dotfiles deposu başlatılamadı" >&2
           return 1
         fi
       else
-        echo "Using existing dotfiles repository: ${dotfiles_root}"
+        echo "Mevcut dotfiles deposu kullanılıyor: ${dotfiles_root}"
       fi
 
       clear
-      # Use the robust array selected_items
+      # Sağlam seçili öğeler dizisini kullan
       for item in "${selected_items[@]}"; do
         managed_items+=("$item")
         local source="$dotfiles_root/${section}/${item}"
         local target="${target_base}/${item}"
 
-        # Backup existing target if it exists
+        # Mevcut hedefi varsa yedekle
         if [[ -e "$target" ]]; then
-          echo "Backing up: $target"
+          echo "Yedekleniyor: $target"
           mv -f "$target" "$BACKUP_DIR"
         fi
 
@@ -2313,27 +2536,27 @@ manage_dotfiles() {
         atomic_symlink "$source" "$target"
       done
 
-      # Validate only managed items
+      # Yalnızca yönetilen öğeleri doğrula
       if validate_symlinks "$target_base" "${managed_items[@]}"; then
-        echo "Success - all managed links valid"
+        echo "Başarılı - tüm yönetilen bağlantılar geçerli"
       else
-        read -p "Found issues. Continue anyway? [y/N] " -n 1
-        [[ $REPLY =~ ^[Yy]$ ]] || return 1
+        read -p "Sorunlar bulundu. Yine de devam edilsin mi? [e/H] " -n 1
+        [[ $REPLY =~ ^[Ee]$ ]] || return 1
       fi
       pressanykey
       ;;
 
-    "Validate")
+    "Doğrula")
       local managed_items=()
-      # Use the robust array selected_items
+      # Sağlam seçili öğeler dizisini kullan
       for item in "${selected_items[@]}"; do
         managed_items+=("$item")
       done
 
       if validate_symlinks "$target_base" "${managed_items[@]}"; then
-        echo "Success - all managed links valid"
+        echo "Başarılı - tüm yönetilen bağlantılar geçerli"
       else
-        echo "Warning: Issues detected in managed links" >&2
+        echo "Uyarı: Yönetilen bağlantılarda sorunlar tespit edildi" >&2
       fi
       pressanykey
       ;;
@@ -2343,16 +2566,16 @@ manage_dotfiles() {
   }
 
   # --------------------------
-  # Main Execution Flow
+  # Ana Yürütme Akışı
   # --------------------------
   while true; do
     local choice=$(dialog --backtitle "$apptitle" \
-      --title "Main Dotfiles Menu" \
-      --menu "Choose configuration section:" \
+      --title "Ana Dotfiles Menüsü" \
+      --menu "Yapılandırma bölümünü seçin:" \
       0 0 0 \
-      "Config" "~/.config directory settings" \
-      "Home" "Home directory dotfiles" \
-      "Exit" "Return to main menu" \
+      "Config" "~/.config dizini ayarları" \
+      "Home" "Ev dizini dotfile'ları" \
+      "Çıkış" "Ana menüye dön" \
       3>&1 1>&2 2>&3) || return 1
 
     case $choice in
@@ -2362,7 +2585,7 @@ manage_dotfiles() {
     "Home")
       process_installation "home" "$HOME"
       ;;
-    "Exit")
+    "Çıkış")
       return 0
       ;;
     esac
@@ -2370,58 +2593,53 @@ manage_dotfiles() {
 }
 
 neovim_dot() {
-  if confirm "\nDo you want to install neovim dotfiles for "$localuser" ?" "" 8 60; then
+  if confirm "\nNeovim dotfiles $localuser için kurulsun mu?" "" 8 60; then
     clear
 
     clone_repo "nvim" /home/"$localuser"/.config/nvim
-    message "\nNeovim dotfiles are installed." "" 8 40
+    message "\nNeovim dotfiles kuruldu." "" 8 40
 
-    if confirm "\nAlso, do you want to install NeoVim dotfiles for root." "" 8 60; then
+    if confirm "\nAyrıca root kullanıcısı için de NeoVim dotfiles kurulsun mu?" "" 8 60; then
       sudo mkdir -p /root/.config/nvim
       sudo ln -sf /home/$localuser/.config/nvim/* /root/.config/nvim
-      message "\nNvim dotfiles are copied for root." "" 8 40
+      message "\nNvim dotfiles root için kopyalandı." "" 8 40
     fi
   fi
 }
 
 install_sddmtheme() {
-  if confirm "\nDo you want to copy themes for sddm ?" "" 8 60; then
-    # Ensure dependencies exist
+  if confirm "\nSugar-Candy temasını kurmak ister misiniz?" "" 8 60; then
+
     isrsync
     clone_repo "dotfiles" || return 1
 
-    # Variables
     local sddmconf_dir="/etc/sddm.conf.d"
     local sugarcandy_dir="/usr/share/sddm/themes/sugar-candy"
-    local cloned_dotfiles_dir="$script_dir/dotfiles" # Ensure $script_dir is defined in the script
+    local cloned_dotfiles_dir="$script_dir/dotfiles"
 
     if command -v sddm &>/dev/null; then
-      # Create configuration and theme directories safely
       sudo mkdir -p "$sddmconf_dir"
       sudo mkdir -p "$sugarcandy_dir"
 
-      # Configure SDDM to use sugar-candy theme
       printf "%s\n" "[Theme]" "Current=sugar-candy" | sudo tee "$sddmconf_dir/10-theme.conf" >/dev/null
 
-      # Copy SDDM configuration file from cloned repo
       if [[ -f "$cloned_dotfiles_dir/sddm/sddm.conf" ]]; then
         sudo rsync -avh "$cloned_dotfiles_dir/sddm/sddm.conf" "$sddmconf_dir/sddm.conf" --delete
       else
-        message "\nSDDM configuration file not found in cloned repository!" "Error" 8 60
+        message "\nSDDM konfigurasyon dosyası klonlanan repoda bulunamadı!" "Error" 8 60
         return 1
       fi
 
-      # Extract sugar-candy theme from tarball
       local tarball_path="$cloned_dotfiles_dir/sddm/sugar-candy/sugar-candy.tar.gz"
       if [[ -f "$tarball_path" ]]; then
         sudo tar -xzvf "$tarball_path" -C "/usr/share/sddm/themes"
-        message "\nSDDM theme installed successfully." "Success" 8 60
+        message "\nTema kuruldu." "Success" 8 60
       else
-        message "\nSugar Candy theme tarball not found!" "Error" 8 60
+        message "\nTema kurulamadı!" "Error" 8 60
         return 1
       fi
     else
-      message "SDDM is not installed. Please install SDDM first." "Error" 10 60
+      message "SDDM yüklü değil. Lütfen ilk önce sddm kurun." "Error" 10 60
       return 1
     fi
   fi
@@ -2432,29 +2650,29 @@ install_wallpapers() {
   local wallpaperdir="$(xdg-user-dir PICTURES)"
   local clone_dir="$script_dir/Wallpaper"
 
-  if confirm "\nDo you want to copy wallpapers to:\n$wallpaperdir?" "Wallpaper Installation" 10 60; then
+  if confirm "\nDuvar kağıtlarını bu konuma kopyalamak ister misiniz:\n$wallpaperdir?" "Duvar kağıtları Yükleme" 10 60; then
     # Clone repository to temporary directory
     if ! clone_repo "Wallpaper"; then
-      message "Failed to download wallpapers!" "Error" 8 60
+      message "Duvar kağıtları indirilemedi!" "Error" 8 60
       return 1
     fi
 
     # Show changes preview
     clear
-    echo "Previewing changes:"
+    echo "Değişiklik önizlemesi:"
     rsync -avh --dry-run --itemize-changes "$clone_dir/" "$wallpaperdir" --delete
 
-    if confirm "\nApply these wallpaper changes?\nFrom: $clone_dir\nTo: $wallpaperdir" "Confirm Sync" 12 70; then
+    if confirm "\nDuvar kağıtları değişikleri uygulansın mı?\nBuradan: $clone_dir\nBuraya: $wallpaperdir" "Onaylama" 12 70; then
       clear
-      echo -e "\nCopying wallpapers..."
+      echo -e "\nKopyalanıyor..."
       if rsync -avh --progress "$clone_dir/" "$wallpaperdir" --delete; then
-        message "Wallpapers successfully copied to:\n$wallpaperdir" "Success" 8 65
+        message "Başarıyla buraya kopyalandı:\n$wallpaperdir" "Success" 8 65
       else
-        message "Failed to copy wallpapers!\nExit code: $?" "Error" 8 60
+        message "Kopyalama başarısız!\nÇıkış kodu: $?" "Error" 8 60
         return 1
       fi
     else
-      message "Wallpaper installation canceled." "Canceled" 8 50
+      message "İptal edildi." "Canceled" 8 50
     fi
   fi
 }
@@ -2474,22 +2692,22 @@ install_kmscon() {
 
 shutdownmenu() {
   local options=(
-    "Reboot" ""
-    "Shutdown" ""
+    "Yeniden başlat" ""
+    "Kapat" ""
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Shutdown :" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Kapatma Menüsü" --cancel-button "Geri" --menu "Seçim yapın:" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case $sel in
-    "Reboot")
-      if confirm "Reboot now ?" "" 6 30; then
+    "Yeniden başlat")
+      if confirm "Sistemi şimdi yeniden başlatmak istediğinizden emin misiniz?" "" 6 30; then
         reboot
       fi
       ;;
-    "Shutdown")
-      if confirm "Shutdown now ?" "" 6 30; then
+    "Kapat")
+      if confirm "Sistemi şimdi kapatmak istediğinizden emin misiniz?" "" 6 30; then
         poweroff
       fi
       ;;
@@ -2497,8 +2715,11 @@ shutdownmenu() {
   fi
 }
 
-loadglobalscope() {
-  # Package dependencies with explicit array
+# ==========================================================
+# Gerekli Bileşenleri ve Global Kapsamı Yükle
+# ==========================================================
+genelkapsamiyukle() {
+  # Açık dizi ile packet bağımlılıkları
   local packages=()
   packages=(
     dialog
@@ -2507,41 +2728,46 @@ loadglobalscope() {
     tree
   )
 
-  # Install missing dependencies
+  # Eksik bağımlılıkları kur
   local missing_pkgs=()
   for pkg in "${packages[@]}"; do
+    # -Qe: Sadece kurulu olanları ve açıkça istenenleri listele
     if ! pacman -Qe "${pkg}" &>/dev/null; then
       missing_pkgs+=("$pkg")
     fi
   done
 
   if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
-    echo "Installing missing dependencies: ${missing_pkgs[*]}"
+    echo "Eksik bağımlılıklar kuruluyor: ${missing_pkgs[*]}"
+    # --needed: Yalnızca henüz kurulu olmayanları kur
     sudo pacman -S --needed --noconfirm "${missing_pkgs[@]}" || {
-      echo "Failed to install dependencies!" >&2
+      echo "Hata: Bağımlılıklar kurulamadı!" >&2
       return 1
     }
   fi
 
-  # 1. Check if the 'xdg-user-dir' package is installed using pacman
-  if pacman -Qs xdg-user-dir >/dev/null; then
+  # --------------------------
+  # XDG Kullanıcı Dizinleri Yapılandırması (Öneri ile Güncellenmiştir)
+  # --------------------------
+  if pacman -Qq xdg-user-dirs >/dev/null; then
 
-    # 2. Check if the standard 'DOWNLOAD' directory is missing
-    #    (If one standard XDG directory is missing, it is assumed others might be too,
-    #     or that the initialization process hasn't run yet.)
-    if [[ ! -d "$(xdg-user-dir DOWNLOAD)" ]]; then
+    # Doğrulama: İNDİRİLENLER dizininin varlığını kontrol et
+    if [[ -d "$(xdg-user-dir DOWNLOAD)" ]]; then
+      echo "XDG Dizinleri başarıyla oluşturuldu/güncellendi."
+    else
+      echo "XDG Kullanıcı Dizinleri kontrol ediliyor ve güncelleniyor..."
 
-      # 3. If the directory is missing, run the update command to create/initialize
-      #    all missing XDG user directories (DOWNLOAD, DOCUMENTS, etc.)
-      echo "xdg DOWNLOAD directory is missing. Creating/updating directories..."
-      xdg-user-dirs-update
-      echo "Directories updated."
+      # Güvenilirlik için daima --force bayrağını kullanın
+      xdg-user-dirs-update --force
       pressanykey
     fi
   fi
 
-  # Environment configuration
+  # --------------------------
+  # Ortam Yapılandırması
+  # --------------------------
   local color_config="colors"
+  # DIALOGRC dosyasını oluştur ve renk ayarlarını yaz
   printf "%s\n" \
     "use_shadow = OFF" \
     "title_color = (BLACK,WHITE,OFF)" \
@@ -2554,17 +2780,20 @@ loadglobalscope() {
     "check_color = tag_color" \
     "check_selected_color = tag_selected_color" >"${color_config}"
 
-  export DIALOGRC="${color_config}"
-  export EDITOR=nvim
+  export DIALOGRC="${color_config}" # dialog için renk dosyasını ayarla
+  export EDITOR=nvim                # Varsayılan düzenleyiciyi ayarla
 
-  # Global variables
-  declare -g apptitle="Arch Linux DE & Apps Installation"
+  # Global değişkenler
+  declare -g apptitle="Arch Linux DE & Uygulama Kurulumu"
   declare -g localuser="$(whoami)"
   declare -g script_dir="$(dirname "$(realpath "$0")")"
 }
 
-clean_installation() {
-  # Always clean regardless of exit status
+# ==========================================================
+# Kurulum Temizliği
+# ==========================================================
+kurulum_temizle() {
+  # Çıkış durumuna bakılmaksızın her zaman temizle
   local to_remove=(
     "dotfiles"
     "Wallpaper"
@@ -2572,9 +2801,9 @@ clean_installation() {
   )
 
   clear
-  echo "Cleaning installation files..."
+  echo "Kurulum dosyaları temizleniyor..."
   for item in "${to_remove[@]}"; do
-    local path="${script_dir:?}/$item"
+    local path="${script_dir:?}/$item" # Güvenli yol
     if [[ -d "$path" ]]; then
       rm -rf "${path}"
     elif [[ -f "$path" ]]; then
@@ -2583,29 +2812,33 @@ clean_installation() {
   done
 }
 
-start() {
-  # Prevent running as root
+# ==========================================================
+# Betiği Başlat
+# ==========================================================
+baslat() {
+  # Root olarak çalıştırılmasını engelle
   if [[ $(id -u) -eq 0 ]]; then
-    echo "Error: This script should not be run as root!" >&2
+    echo "Hata: Bu betik root (yönetici) olarak çalıştırılmamalıdır!" >&2
     return 1
   fi
 
   if [[ -z "$1" ]]; then
-    echo "Arch Linux Installation is starting..."
-    loadglobalscope || return 1
-    mainmenu
+    echo "Arch Linux Kurulumu başlatılıyor..."
+    genelkapsamiyukle || return 1
+    mainmenu # mainmenu fonksiyonu çağrılır
   else
-    echo "Arch Linux Installation - Function Mode"
+    echo "Arch Linux Kurulumu - Fonksiyon Modu"
+    # Komut satırı argümanı olarak bir fonksiyon adı verilmişse
     if declare -f "$1" >/dev/null; then
-      loadglobalscope || return 1
-      "$@" # Proper argument handling
+      genelkapsamiyukle || return 1
+      "$@" # Uygun argüman işleme ile fonksiyonu çalıştır
     else
-      echo "Error: Function '$1' not found" >&2
+      echo "Hata: Fonksiyon '$1' bulunamadı" >&2
       return 1
     fi
   fi
 
-  clean_installation
+  kurulum_temizle
 }
 
-start "$@"
+baslat "$@"
