@@ -39,14 +39,9 @@ Betiğin doğru şekilde çalışması için aşağıdaki koşulların sağlanma
 Betiği kullanmak için öncelikle depoyu klonlayın ve çalıştırma izni verin:
 
 ```bash
-# 1. Depoyu klonlayın
-git clone https://github.com/drpars/installarchde
-cd installarchde
-
-# 2. Betiğe çalıştırma izni verin
-chmod +x installarchde
-
-# 3. Betiği başlatın (Ana Menü)
+git clone https://github.com/drpars/installarchde \
+cd installarchde \
+chmod +x installarchde \
 ./installarchde
 ```
 
