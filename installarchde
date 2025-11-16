@@ -1473,12 +1473,13 @@ multimedia_apps() {
 theme_engines() {
   local options=(
     "lxappearance" "(GTK)" off
-    "nwg-look" "(GTK)" off
+    "nwg-look" "(GTK)" on
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
     "qt6ct" "" off
-    "qt6ct-kde" "(AUR)" off
+    "qt6ct-kde" "(AUR)" on
+    "darkly-bin" "(AUR)" on
     "darkly-qt6-git" "(AUR)" off
   )
 
@@ -1488,14 +1489,14 @@ theme_engines() {
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
 
-    if [[ "${sel}" == *"darkly"* ]]; then
+    if [[ "${sel}" == *"darkly-qt6-git"* ]]; then
       install_darkly_deps
     fi
 
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "qt6ct-kde" | "darkly-qt5-git" | "darkly-qt6-git")
+      "qt6ct-kde" | "darkly-bin" | "darkly-qt5-git" | "darkly-qt6-git")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
