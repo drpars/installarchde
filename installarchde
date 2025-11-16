@@ -550,7 +550,7 @@ updatemenu() {
     "yay Kur" "AUR yardımcısı yay'ı kur"
     "paru Kur" "AUR yardımcısı paru'yu kur"
     "" ""
-    "System Güncelle" "pacman -Syu komutunu çalıştır"
+    "Sistemi Güncelle" "pacman -Syu komutunu çalıştır"
     "Gereksiz Bağımlılıkları Temizle" "Yalnız kalan (orphan) paketleri kaldır"
     "Packet Önbelleğini Temizle" "Pacman indirme önbelleğini temizle (pacman -Sc)"
     "" ""
@@ -593,9 +593,9 @@ updatemenu() {
         cd ..
         pressanykey
       fi
-      nextitem="System Güncelle"
+      nextitem="Sistemi Güncelle"
       ;;
-    "System Güncelle")
+    "Sistemi Güncelle")
       clear
       sudo pacman -Syu
       nextitem="Gereksiz Bağımlılıkları Temizle"
@@ -1809,6 +1809,7 @@ hyprland() {
     "mako" "" on
     "libnotify" "" on
     "cliphist" "" on
+    "waypaper" "(AUR)" off
     "swappy" "" on
     "swww" "" on
     "imv" "" on
@@ -1832,7 +1833,7 @@ hyprland() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "walker" | "elephant" | "elephant-desktopapplications" | "elephant-archlinuxpkgs" | "wleave-git" | "wlogout" | "waybar-updates")
+      "walker" | "elephant" | "elephant-desktopapplications" | "elephant-archlinuxpkgs" | "wleave-git" | "wlogout" | "waybar-updates" | "waypaper")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
@@ -2029,6 +2030,7 @@ configmenu() {
     "Dotfile'lar" "Kullanıcı yapılandırma dosyaları"
     "Takas Dosyası Yapılandırması" "Hazırda bekletme (hibernation) için çekirdek modülü ayarı (systemd-boot)"
     "Ağ Yapılandırması" "Dosya paylaşımı ve keşif ayarları"
+    "TR klavye desteği" "tr, pc105 --> vconsole.conf"
     "DDCCI Sürücü Kurulumu" "DDCCI ayarları"
   )
 
@@ -2051,6 +2053,13 @@ configmenu() {
       ;;
     "Ağ Yapılandırması")
       network_config
+      nextitem="TR klavye desteği"
+      ;;
+    "TR klavye desteği")
+      clear
+      echo "sudo localectl set-x11-keymap tr pc105"
+      sudo localectl set-x11-keymap tr pc105
+      pressanykey
       nextitem="DDCCI Sürücü Kurulumu"
       ;;
     "DDCCI Sürücü Kurulumu")
@@ -2248,19 +2257,19 @@ dotfilesmenu() {
       nextitem="Neovim"
       ;;
     "Neovim")
-      neovim_dot # Fonksiyon adı korundu
+      neovim_dot
       nextitem="Sddm Tema"
       ;;
     "Sddm Tema")
-      install_sddmtheme # Fonksiyon adı korundu
+      install_sddmtheme
       nextitem="Duvar Kağıtları"
       ;;
     "Duvar Kağıtları")
-      install_wallpapers # Fonksiyon adı korundu
+      install_wallpapers
       nextitem="KMSCON"
       ;;
     "KMSCON")
-      install_kmscon # Fonksiyon adı korundu
+      install_kmscon
       nextitem="Neovim dotfile'larını kaldır"
       ;;
     "bat önbelleğini oluştur")
@@ -2678,16 +2687,75 @@ install_wallpapers() {
 }
 
 install_kmscon() {
-  # Install KMSCON
-  instpkg "" "kmscon-macslow-git"
-  # Configure KMSCON
-  sudo mkdir -p /etc/kmscon
-  printf "%s\n" "font-name=JetBrainsMono Nerd Font" "font-size=14" "login=/bin/login -p -f $localuser" | sudo tee /etc/kmscon/kmscon.conf >/dev/null
-  # Enable service only tty5
-  serviceenable kmsconvt@tty5.service
-  sudo localectl set-x11-keymap tr pc105 --no-ask-password
-  # All tty
-  # ln -s /usr/lib/systemd/system/kmsconvt@.service /etc/systemd/system/autovt@.service
+  local config_file="/etc/kmscon/kmscon.conf"
+  local font_setting="JetBrainsMono Nerd Font Mono"
+  local tty_input
+
+  if confirm "KMSCON kurmak ve ayarlamak istermisiniz?" "" 6 30; then
+    clear
+    # 1. KMSCON Kurulumu
+    echo "KMSCON paketleri kuruluyor..."
+    # instpkg fonksiyonunun başarılı olduğundan emin olun.
+    instpkg "" "kmscon" || {
+      echo "Hata: kmscon kurulumu başarısız oldu." >&2
+      return 1
+    }
+
+    # Dizin oluşturma
+    sudo mkdir -p /etc/kmscon || {
+      echo "Hata: /etc/kmscon dizini oluşturulamadı." >&2
+      return 1
+    }
+
+    # 2. TTY Numarası Alma
+    tty_input=$(dialog --backtitle "${apptitle}" --title "KMSCON'u hangi TTY için ayarlamak istersiniz?" --inputbox "Lütfen 3 ile 6 arasında bir TTY numarası girin:" 8 70 "5" 3>&1 1>&2 2>&3)
+
+    # Kullanıcı iptali kontrolü (dialog exit code 0 değilse)
+    if [ "$?" -ne 0 ]; then
+      echo "KMSCON kurulumu kullanıcı tarafından iptal edildi." >&2
+      return 1
+    fi
+
+    # 3. KMSCON Yapılandırma Dosyasını Yazma (/etc/kmscon/kmscon.conf)
+    echo "KMSCON global yapılandırma dosyası yazılıyor: $config_file"
+
+    # Yapılandırma içeriğini yazma
+    printf "%s\n" \
+      "font-name=$font_setting" \
+      "font-size=14" \
+      "font-dpi=96" | sudo tee "$config_file" >/dev/null
+
+    # tee komutunun başarı kontrolü
+    if [ "$?" -ne 0 ]; then
+      echo "Hata: Yapılandırma dosyası $config_file yazılamadı." >&2
+      return 1
+    fi
+
+    # 4. systemd Hizmetlerini Ayarlama
+
+    # Mevcut getty hizmetini devre dışı bırak
+    echo "tty${tty_input} için mevcut getty hizmeti devre dışı bırakılıyor."
+    servicedisable getty@tty$tty_input.service || echo "Uyarı: getty hizmeti devre dışı bırakılamadı." >&2
+
+    # KMSCON hizmetini aktif et
+    echo "KMSCON hizmeti tty${tty_input} için aktif ediliyor."
+    serviceenable kmsconvt@tty$tty_input.service || {
+      echo "Hata: kmsconvt@tty$tty_input.service etkinleştirilemedi. Birim adını kontrol edin." >&2
+      return 1
+    }
+
+    # 5. Klavye Haritasını Ayarlama
+    echo "Klavye haritası 'tr' olarak ayarlanıyor."
+    # --no-ask-password bayrağını kaldırdım. Güvenli sudo/localectl kullanın.
+    sudo localectl set-x11-keymap tr pc105
+
+    echo "KMSCON kurulumu tty${tty_input} için başarıyla tamamlandı."
+
+  else
+    echo "KMSCON kurulumu atlandı."
+  fi
+  pressanykey
+  return 0
 }
 
 shutdownmenu() {
@@ -2835,7 +2903,7 @@ baslat() {
   if [[ -z "$1" ]]; then
     echo "Arch Linux Kurulumu başlatılıyor..."
     genelkapsamiyukle || return 1
-    mainmenu # mainmenu fonksiyonu çağrılır
+    mainmenu
   else
     echo "Arch Linux Kurulumu - Fonksiyon Modu"
     # Komut satırı argümanı olarak bir fonksiyon adı verilmişse
