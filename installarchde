@@ -91,7 +91,7 @@ instpkg() {
     fi
 
     echo "# sudo -u $localuser $aurhelper -S --needed $aurpkg"
-    sudo -u "$localuser" "$aurhelper" -S --needed "$aurpkg"
+    sudo -u $localuser $aurhelper -S --needed $aurpkg
     pressanykey
   fi
 
@@ -483,6 +483,7 @@ WantedBy=multi-user.target"
   sudo rm "$SERVICE_FILE" "$RETRY_SCRIPT" /etc/modprobe.d/ddcci.conf 2>/dev/null
   sudo systemctl daemon-reload
 
+  clear
   # 1. Sürücüyü kontrol et/kur
   if ! install_aur_driver; then exit 1; fi
 
@@ -502,6 +503,7 @@ WantedBy=multi-user.target"
   else
     echo "Kurulum tamamlandı. Anında algılama başarısız olsa da, **sistemin yeniden başlatılması gerekir**. Retry hizmeti açılışta denemeye devam edecektir."
   fi
+  pressanykey
 }
 
 # --------------------------
@@ -662,7 +664,7 @@ installmenu() {
       nextitem="Uygulamalar"
       ;;
     "Uygulamalar")
-      appmenu
+      menu_main_applications
       nextitem="Yazı Tipleri"
       ;;
     "Yazı Tipleri")
@@ -976,7 +978,7 @@ sounddriver() {
     "pipewire-zeroconf" "" on
     "pipewire-x11-bell" "" off
     "easyeffects" "" off
-    "jamesdsp-pipewire-bin" "(AUR)" on
+    "jamesdsp-pipewire-bin" "(AUR)" off
   )
 
   local sel
@@ -1489,7 +1491,7 @@ theme_engines() {
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
 
-    if [[ "${sel}" == *"darkly-qt6-git"* ]]; then
+    if [[ "${sel}" == *"darkly"* ]]; then
       install_darkly_deps
     fi
 
@@ -1512,26 +1514,28 @@ install_darkly_deps() {
   local options=(
     "cmake" "" on
     "extra-cmake-modules" "" on
-    "kdecoration" "" on
-    "qt6-declarative" "" on
-    "kcoreaddons" "" on
+    "frameworkintegration" "" on
+    "frameworkintegration5" "" on
+    "gcc" "" on
+    "git" "" on
     "kcmutils" "" on
+    "kcmutils5" "" on
     "kcolorscheme" "" on
     "kconfig" "" on
+    "kconfigwidgets5" "" on
+    "kcoreaddons" "" on
+    "kdecoration" "" on
     "kguiaddons" "" on
     "kiconthemes" "" on
-    "kwindowsystem" "" on
-    "git" "" on
-    "qt5-declarative" "" on
-    "qt5-x11extras" "" on
-    "gcc" "" on
-    "make" "" on
-    "kcmutils5" "" on
-    "frameworkintegration5" "" on
-    "kconfigwidgets5" "" on
     "kiconthemes5" "" on
     "kirigami2" "" on
+    "kwindowsystem" "" on
     "kwindowsystem5" "" on
+    "libplasma" "" on
+    "make" "" on
+    "qt5-declarative" "" on
+    "qt5-x11extras" "" on
+    "qt6-declarative" "" on
   )
 
   local sel
@@ -1685,8 +1689,6 @@ config_virt_manager() {
   # Servisleri etkinleştir
   serviceenable libvirtd.service
   serviceenable virtlogd.service
-
-  pressanykey
 }
 
 # --------------------------
@@ -1734,15 +1736,11 @@ themes() {
   if [[ "$?" -eq 0 ]]; then
     case $sel in
     "Qogir icon theme")
-      clear
       instpkg "" "qogir-icon-theme"
-      pressanykey
       nextitem="Tokyonight GTK theme"
       ;;
     "Tokyonight GTK theme")
-      clear
       instpkg "" "tokyonight-gtk-theme-git"
-      pressanykey
       nextitem="Mocu xcursor"
       ;;
     "Mocu xcursor")
@@ -1823,7 +1821,6 @@ hyprland() {
     "bluetui" "" on
     "impala" "TUI for iwd" on
     "brightnessctl" "" off
-    "ddcci-driver-linux-dkms-git" "Harici monitor için" off
   )
 
   local sel
@@ -1841,12 +1838,6 @@ hyprland() {
       esac
     done
     instpkg "$pkg" "$aurpkg"
-
-    if [[ "$sel" == *"ddcci-driver-linux-dkms-git"* ]] && pacman -Qq ddcci-driver-linux-dkms-git >/dev/null; then
-      if confirm "\nDDCI ayarlarını uygulamak ister misiniz? \nBazı masaüstü bilgisayarlarda uygulanması gerekir. \nDaha sonra Config menüsünden uygulanabilir. " "" 10 60; then
-        ddci-setup
-      fi
-    fi
   fi
 }
 
@@ -2065,6 +2056,7 @@ configmenu() {
       ;;
     "DDCCI Sürücü Kurulumu")
       if confirm "\nDDCCI sürücüsü için gerekli ayarları uygulamak istiyor musunuz? \n " "" 10 65; then
+        clear
         ddci-setup
       fi
       ;;
@@ -2692,7 +2684,7 @@ install_kmscon() {
   local font_setting="JetBrainsMono Nerd Font Mono"
   local tty_input
 
-  if confirm "KMSCON kurmak ve ayarlamak istermisiniz?" "" 6 30; then
+  if confirm "KMSCON kurmak ve ayarlamak istermisiniz?" "" 6 50; then
     clear
     # 1. KMSCON Kurulumu
     echo "KMSCON paketleri kuruluyor..."
@@ -2749,10 +2741,11 @@ install_kmscon() {
     echo "Klavye haritası 'tr' olarak ayarlanıyor."
     # --no-ask-password bayrağını kaldırdım. Güvenli sudo/localectl kullanın.
     sudo localectl set-x11-keymap tr pc105
-
+    clear
     echo "KMSCON kurulumu tty${tty_input} için başarıyla tamamlandı."
 
   else
+    clear
     echo "KMSCON kurulumu atlandı."
   fi
   pressanykey
@@ -2819,7 +2812,6 @@ genelkapsamiyukle() {
   # XDG Kullanıcı Dizinleri Yapılandırması (Öneri ile Güncellenmiştir)
   # --------------------------
   if pacman -Qq xdg-user-dirs >/dev/null; then
-
     # Doğrulama: İNDİRİLENLER dizininin varlığını kontrol et
     if [[ -d "$(xdg-user-dir DOWNLOAD)" ]]; then
       echo "XDG Dizinleri başarıyla oluşturuldu/güncellendi."
@@ -2827,8 +2819,8 @@ genelkapsamiyukle() {
       echo "XDG Kullanıcı Dizinleri kontrol ediliyor ve güncelleniyor..."
 
       # Güvenilirlik için daima --force bayrağını kullanın
+      xdg-user-dirs-update
       xdg-user-dirs-update --force
-      pressanykey
     fi
   fi
 
@@ -2890,6 +2882,11 @@ baslat() {
     echo "Hata: Bu betik root (yönetici) olarak çalıştırılmamalıdır!" >&2
     return 1
   fi
+
+  # if [[ ! -d "$(xdg-user-dir DOWNLOAD)" ]]; then
+  #   echo "Hata: XDG kullanıcı dosyaları olmadan bu betik çalışmaz. \nxdg-user-dirs paketini yükleyin. \nxdg-user-dirs-update komutunu çalıştırın! "
+  #   return 1
+  # fi
 
   if [[ "$1" == "fonksiyonlar" ]]; then
     # FONKSİYON LİSTELEME VE SÜTUNLARA AYIRMA
