@@ -326,6 +326,7 @@ ddci-setup() {
         return 1
       fi
     fi
+
     local I2C_NUMBER
     I2C_NUMBER=$(ddcutil detect 2>/dev/null |
       grep -E '^[[:space:]]*I2C bus:' |
@@ -349,10 +350,7 @@ ddci-setup() {
       return 0
     fi
     echo "UYARI: $AUR_DRIVER sürücüsü kurulu değil." >&2
-    if ! command -v yay &>/dev/null; then
-      echo "KRİTİK HATA: 'yay' komutu bulunamadı. Lütfen yay'ı kurun." >&2
-      return 1
-    fi
+
     read -r -p "$AUR_DRIVER sürücüsünü yay ile kurmak ister misiniz? (AUR paketi) [e/H] " response
     response=${response,,}
     if [[ "$response" =~ ^(e|evet)$ ]]; then
@@ -424,7 +422,7 @@ EOF
 
     # b) Systemd Service İçeriği
     local SERVICE_CONTENT="[Unit]
-Description=DDCCI Backlight Retry Loader for i2c-$I2C_NUM
+Description=DDCCI Backlight Retry Loader for i2c-N
 Wants=systemd-modules-load.service local-fs.target
 After=systemd-modules-load.service local-fs.target
 After=display-manager.service
@@ -474,7 +472,8 @@ WantedBy=multi-user.target"
   # A N A  Ç A L I Ş M A
   # =================================================================
 
-  echo "DDCCI Kurulum Script'i Başlatılıyor (Nihai Versiyon)..."
+  clear
+  echo "DDCCI Kurulum Script'i Başlatılıyor ..."
 
   # Önceki başarısız denemelerden kalıntıları temizle
   echo "BİLGİ: Önceki systemd servisleri ve modül ayarları temizleniyor..."
@@ -483,7 +482,6 @@ WantedBy=multi-user.target"
   sudo rm "$SERVICE_FILE" "$RETRY_SCRIPT" /etc/modprobe.d/ddcci.conf 2>/dev/null
   sudo systemctl daemon-reload
 
-  clear
   # 1. Sürücüyü kontrol et/kur
   if ! install_aur_driver; then exit 1; fi
 
@@ -514,7 +512,7 @@ WantedBy=multi-user.target"
 mainmenu() {
   local nextitem="${1:-.}"
   local options=(
-    "Güncelleme" "System ve AUR güncellemeleri ile ilgili araçlar"
+    "Güncelleme" "Sistem ve AUR güncellemeleri ile ilgili araçlar"
     "Kurulum" "Sürücüler, uygulamalar, masaüstü ortamları kurulumu"
     "Yapılandırma" "Dotfile'lar, ağ, takas alanı ve sanallaştırma ayarları"
     "Kapatma" "Sistemi kapatma veya yeniden başlatma seçenekleri"
@@ -823,7 +821,7 @@ nvidiadriver() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qq nvidia &>/dev/null; then
+    if pacman -Qs nvidia &>/dev/null; then
       if confirm "\nGerekli çekirdek modülleri uygulansın mı?" "" 8 60; then
         clear
         configure_nvidia_modules
@@ -999,11 +997,8 @@ sounddriver() {
 }
 
 # --------------------------
-# UYGULAMA MENÜLERİ (Detaylı ve Kapsamlı)
+# UYGULAMA MENÜLERİ
 # --------------------------
-
-# Gerekli varsayımlar: Betiğin başında `apptitle` değişkeni tanımlanmış olmalıdır (örn: declare -g apptitle="Arch Linux Uygulama Kurulumu").
-# Ayrıca, confirm, message, instpkg, choosepkg, serviceenable gibi yardımcı fonksiyonların tanımlı olduğu varsayılmıştır.
 
 # Ana Uygulama Menüsü
 menu_main_applications() {
@@ -1013,7 +1008,7 @@ menu_main_applications() {
     "Sıkıştırma araçları" ""
     "Programlama" ""
     "Dosya sistemleri" ""
-    "System" ""
+    "Sistem" ""
     "İnternet" ""
     "Ortak uygulamalar" ""
     "Dosya gezginleri" ""
@@ -1042,9 +1037,9 @@ menu_main_applications() {
       ;;
     "Dosya sistemleri")
       filesystem_tools
-      nextitem="System"
+      nextitem="Sistem"
       ;;
-    "System")
+    "Sistem")
       system_apps
       nextitem="İnternet"
       ;;
@@ -1086,7 +1081,8 @@ menu_main_applications() {
 console_apps() {
   local options=(
     "cmatrix" "" off
-    "cmatrix-neo-git" "" off
+    "cmatrix-neo-git" "(AUR)" off
+    "wget" "" on
     "fastfetch" "" on
     "mpv" "" on
     "mc" "" on
@@ -1124,12 +1120,12 @@ console_apps() {
 # --- Sıkıştırma Araçları Seçimi ---
 compression_tools() {
   local options=(
-    "tar" "" off
-    "zip" "" off
-    "unzip" "" off
-    "unrar" "" off
-    "p7zip" "" off
-    "lzop" "" off
+    "tar" "" on
+    "zip" "" on
+    "unzip" "" on
+    "unrar" "" on
+    "p7zip" "" on
+    "lzop" "" on
   )
 
   local sel
@@ -1150,13 +1146,9 @@ compression_tools() {
 # --- Programlama Araçları Seçimi ---
 programming_tools() {
   local options=(
-    # Python
     "python" "" on
-    "python-pip" "" on
-    "python-pipx" "" on
     "python-psutil" "" on
     "python-requests" "" on
-    # Diğerleri
     "go" "" on
     "go-tools" "" on
     "codespell" "" on
@@ -1213,7 +1205,7 @@ filesystem_tools() {
   fi
 }
 
-# --- System Uygulamaları Seçimi ---
+# --- Sistem Uygulamaları Seçimi ---
 system_apps() {
   local options=(
     "gnome-disk-utility" "" on
@@ -1226,7 +1218,7 @@ system_apps() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "System uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Sistem uygulamaları :" --cancel-button "Geri" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     local pkg="" aurpkg=""
@@ -1243,10 +1235,9 @@ system_apps() {
 # --- İnternet Uygulamaları Seçimi ---
 internet_apps() {
   local options=(
-    "firefox" "" off
+    "firefox" "" on
     "thunderbird" "" off
     "zen-browser-bin" "(AUR)" on
-    "wget" "" off
     "uget" "" off
     "transmission-gtk" "" off
     "transmission-qt" "" off
@@ -1285,7 +1276,7 @@ common_apps() {
     "libreoffice-fresh" "" off
     "libreoffice-still" "" off
     "openrgb" "" on
-    "solaar" "Logitech fare desteği" on
+    "solaar" "Logitech fare desteği" off
     "waydroid" "(AUR)" on
     "waydroid-helper" "(AUR)" on
     "kate" "" on
@@ -1294,8 +1285,6 @@ common_apps() {
     "bleachbit" "Profil temizleyici" off
     "webapp-manager" "(AUR)" on
     "stacer-bin" "(AUR)" off
-    "isomaster" "(AUR)" off
-    "startup-settings-git" "(AUR)" off
   )
 
   local sel
@@ -1308,7 +1297,7 @@ common_apps() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "waydroid" | "waydroid-helper" | "webapp-manager" | "stacer-bin" | "isomaster" | "startup-settings-git")
+      "waydroid" | "waydroid-helper" | "webapp-manager" | "stacer-bin")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
@@ -1343,7 +1332,7 @@ config_waydroid_dependencies() {
   local options=(
     "binder_linux-dkms" "(AUR)" on
     "python-pyclip" "(AUR)" on
-    "waydroid-settings-git" "(AUR)" off
+    "waydroid-helper" "(AUR)" off
   )
 
   local sel
@@ -1355,7 +1344,7 @@ config_waydroid_dependencies() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "binder_linux-dkms" | "python-pyclip" | "waydroid-settings-git")
+      "binder_linux-dkms" | "python-pyclip" | "waydroid-helper")
         aurpkg="$aurpkg $item"
         ;;
       *) pkg="$pkg $item" ;;
@@ -1387,11 +1376,11 @@ file_browsers() {
   options=(
     "archlinux-xdg-menu" "" on
     "yazi" "" on
-    "dolphin" "KDE" off
-    "dolphin-plugins" "KDE" off
-    "kdenetwork-filesharing" "KDE" off
-    "ffmpegthumbs" "KDE" off
-    "ark" "KDE" off
+    "dolphin" "KDE" on
+    "dolphin-plugins" "KDE" on
+    "kdenetwork-filesharing" "KDE" on
+    "ffmpegthumbs" "KDE" on
+    "ark" "KDE" on
     "thunar" "XFCE" off
     "thunar-volman" "XFCE" off
     "thunar-archive-plugin" "XFCE" off
@@ -1475,12 +1464,12 @@ multimedia_apps() {
 theme_engines() {
   local options=(
     "lxappearance" "(GTK)" off
-    "nwg-look" "(GTK)" on
+    "nwg-look" "(GTK)" off
     "kvantum" "(QT6)" off
     "kvantum-qt5" "(QT5)" off
     "qt5ct" "" off
     "qt6ct" "" off
-    "qt6ct-kde" "(AUR)" on
+    "qt6ct-kde" "(AUR)" off
     "darkly-bin" "(AUR)" on
     "darkly-qt6-git" "(AUR)" off
   )
@@ -1626,7 +1615,7 @@ virt_manager_packages() {
   fi
 }
 
-# --- Virt Manager Yapılandırması (Fonksiyon Adı Korundu) ---
+# --- Virt Manager Yapılandırması ---
 config_virt_manager() {
   clear
 
@@ -1655,7 +1644,7 @@ config_virt_manager() {
     printf "\nfirewall_backend=\"iptables\"\n" |
       sudo tee -a /etc/libvirt/network.conf >/dev/null
   else
-    echo "/etc/libvirt/network.conf zaten değiştirilmiş..."
+    echo "/etc/libvirt/network.conf zaten yapılandırılmış..."
   fi
 
   # mkinitcpio.conf güncelle
@@ -1762,7 +1751,7 @@ demenu() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Display Manager :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Görüntü yöneticisi :" --default-item "${nextitem}" --cancel-button "Back" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case $sel in
@@ -1808,7 +1797,7 @@ hyprland() {
     "mako" "" on
     "libnotify" "" on
     "cliphist" "" on
-    "waypaper" "(AUR)" off
+    "waypaper" "(AUR)" on
     "swappy" "" on
     "swww" "" on
     "imv" "" on
@@ -1818,8 +1807,8 @@ hyprland() {
     "playerctl" "" on
     "pamixer" "" on
     "pavucontrol" "" on
-    "bluetui" "" on
-    "impala" "TUI for iwd" on
+    "bluetui" "Bluetooth kontrol uygulaması (TUI)" on
+    "impala" "iwd için uygulama (TUI)" on
     "brightnessctl" "" off
   )
 
@@ -1864,7 +1853,7 @@ plasma() {
     "kio-gdrive" "Google Drive entegrasyonu" on
     "kolourpaint" "Basit boyama programı" on
     "konsole" "Terminal emülatörü" on
-    "ksystemlog" "System kayıtlarını görüntüleyici" on
+    "ksystemlog" "Sistem kayıtlarını görüntüleyici" on
     "ktouch" "On Parmak Yazma Eğitimi" off
     "lokalize" "Çeviri / Yerelleştirme aracı" off
     "okular" "Belge görüntüleyici (PDF, EPUB vb.)" on
@@ -1923,7 +1912,7 @@ gnome() {
     "gnome-characters" "Özel karakterler" on
     "gnome-color-manager" "Renk yönetimi" on
     "gnome-font-viewer" "Yazı tipi görüntüleyici" on
-    "gnome-logs" "System kayıt görüntüleyicisi" on
+    "gnome-logs" "Sistem kayıt görüntüleyicisi" on
     "gnome-menus" "Menü sistemi" on
     "gnome-photos" "Fotoğraf görüntüleyici ve düzenleyici" on
     "gnome-remote-desktop" "Uzak masaüstü erişimi" on
@@ -1961,9 +1950,9 @@ gnome() {
 displaymanager() {
   local options=(
     "gdm" "Gnome Giriş Yöneticisi"
-    "sddm" "QT5 Giriş Yöneticisi"
+    "sddm" "QT Giriş Yöneticisi"
     "sddm-git" "(AUR)"
-    "regreet" ""
+    "regreet" "Ayarları tamamlanmadı"
     "lxdm" "LXDE Giriş Yöneticisi"
     "lightdm-gtk-greeter" "Diğer Giriş Yöneticisi"
   )
@@ -2222,7 +2211,7 @@ network_config() {
       sudo firewall-cmd --reload
     fi
 
-    echo "Samba yapılandırması tamamlandı. Değişikliklerin uygulanması için yeniden başlatın veya servisleri yeniden başlatın."
+    echo "Samba yapılandırması tamamlandı. Değişikliklerin uygulanması için sistemi yeniden başlatın veya servisleri yeniden başlatın."
     pressanykey
   fi
 }
@@ -2236,7 +2225,7 @@ dotfilesmenu() {
     "Sddm Tema" "Sugar-Candy veya başka bir SDDM temasını kur"
     "Duvar Kağıtları" "Duvar kağıtlarını kur"
     "KMSCON" "Sanal Konsol yapılandırmasını kur"
-    "bat önbelleğini oluştur" "bat sözdizimi önbelleğini yeniden oluştur"
+    "bat önbelleğini oluştur" "cat muadili"
     "Neovim dotfile'larını kaldır" "nvim yapılandırmasını tamamen sil"
   )
 
@@ -2263,13 +2252,14 @@ dotfilesmenu() {
       ;;
     "KMSCON")
       install_kmscon
-      nextitem="Neovim dotfile'larını kaldır"
+      nextitem="bat önbelleğini oluştur"
       ;;
     "bat önbelleğini oluştur")
       # Bat önbellek oluşturma
       if command -v bat >/dev/null; then
         bat cache --build >/dev/null
       fi
+      nextitem="Neovim dotfile'larını kaldır"
       ;;
     "Neovim dotfile'larını kaldır")
       if confirm "\nnvim dotfile'larını kaldırmak istiyor musunuz?" "" 8 60; then
@@ -2321,10 +2311,10 @@ manage_dotfiles() {
     done
 
     if [[ ${#broken_links[@]} -gt 0 ]]; then
-      echo -e "\n❌ Bozuk sembolik bağlar bulundu:"
+      echo -e "\nBozuk sembolik bağlar bulundu:"
       printf '  - %s\n' "${broken_links[@]}"
     else
-      echo -e "\n✅ Tüm yönetilen sembolik bağlar geçerli"
+      echo -e "\nTüm yönetilen sembolik bağlar geçerli"
     fi
 
     return $exit_code
@@ -2383,7 +2373,7 @@ manage_dotfiles() {
     # Boşluk/özel karakter içeren dosya adlarını güvenli bir şekilde işlemek için find ve read kullanılır.
     while IFS= read -r -d $'\0' item; do
       local clean_name="${item##*/}"
-      options+=("$clean_name" "İçin yapılandırma: $clean_name" off)
+      options+=("$clean_name" "" off)
     done < <(find "$path" -mindepth 1 -maxdepth 1 \( -type d -o -type f \) -print0 | sort -zV)
 
     [[ ${#options[@]} -eq 0 ]] && return 1
