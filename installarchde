@@ -7,6 +7,17 @@
 # interaktif olarak kurup yapılandırmak için tasarlanmıştır.
 # ==========================================================
 
+# ==========================================================
+# GLOBAL DEĞİŞKENLER VE AYARLAR
+# ==========================================================
+declare -g apptitle="Arch Linux DE & Uygulama Kurulumu"
+declare -g localuser="$(whoami)"
+declare -g script_dir="$(dirname "$(realpath "$0")")"
+
+# AUR Yöneticisi değişkenleri (Başlangıçta boş olmalı)
+declare -g AUR_YARDIMCISI=""
+declare -g AUR_YARDIMCISI_KONTROL_ETTIK=false
+
 # --------------------------
 # Gerekli Fonksiyonlar
 # --------------------------
@@ -67,64 +78,200 @@ resetvalue() {
 
 # Packet yükleme fonksiyonu (Pacman ve AUR)
 instpkg() {
-  clear
-  # pkg: Pacman'den yüklenecek paketler
-  # aurpkg: AUR'dan (yay/paru) yüklenecek paketler
-  pkg="$1"
-  aurpkg="$2"
+  local pkg="$1"
+  local aurpkg="$2"
+  local ret=0
 
+  clear
+
+  # ------------------------------------------------
+  # 1. PACMAN İLE YÜKLEME
+  # ------------------------------------------------
   if [[ -n "$pkg" ]]; then
-    echo "# sudo pacman -S --needed $pkg"
-    sudo pacman -S --needed $pkg
+    echo -e "\033[1;36m>> Pacman ile Paketler Yükleniyor...\033[0m"
+    echo "Komut: sudo pacman -S --needed $pkg"
+
+    # shellcheck disable=SC2086
+    if ! sudo pacman -S --needed $pkg; then
+      echo -e "\033[1;31mHata: Pacman paket yüklemesi başarısız oldu.\033[0m" >&2
+      ret=1
+    fi
     pressanykey
   fi
 
+  # ------------------------------------------------
+  # 2. AUR İLE YÜKLEME
+  # ------------------------------------------------
   if [[ -n "$aurpkg" ]]; then
-    local aurhelper
-    if command -v yay &>/dev/null; then
-      aurhelper="yay"
-    elif command -v paru &>/dev/null; then
-      aurhelper="paru"
+    if [[ -z "$AUR_YARDIMCISI" ]]; then
+      echo -e "\033[1;31mHata: AUR paketleri için yardımcı belirlenemediği için yüklenemiyor.\033[0m" >&2
+      ret=1
     else
-      echo "AUR paketlerini kurmak için bir AUR yardımcısı (yay veya paru) Kurulum/Güncelleme menüsünden yüklenmelidir!"
-      return 1
-    fi
+      local aur_helper="$AUR_YARDIMCISI"
 
-    echo "# sudo -u $localuser $aurhelper -S --needed $aurpkg"
-    sudo -u $localuser $aurhelper -S --needed $aurpkg
+      echo -e "\n\033[1;36m>> AUR ($aur_helper) ile Paketler Yükleniyor...\033[0m"
+      echo "Komut: $aur_helper -S --needed $aurpkg"
+
+      # shellcheck disable=SC2086
+      if ! "$aur_helper" -S --needed $aurpkg; then
+        echo -e "\033[1;31mHata: AUR paket yüklemesi başarısız oldu.\033[0m" >&2
+        ret=1
+      fi
+    fi
     pressanykey
   fi
 
   resetvalue pkg aurpkg
+  return "$ret"
 }
 
-# İnteraktif packet seçme fonksiyonu (Pacman depolarından arama yapar)
+# Sadece Pacman depolarında arama yapar ve seçimi döndürür.
 choosepkg() {
   local search_term="$1"
-  local title="${2:-$1}"
+  local title="${2:-$search_term}"
   local options=()
-  local items
+  local pacman_items=""
+  local selected_pacman_pkgs=""
 
-  items=$(pacman -Ssq "$search_term")
+  clear
+  echo -e "\033[1;33m>> '$search_term' için Pacman depolarında aranıyor...\033[0m"
 
-  for item in $items; do
-    options+=("$item" "" off)
+  # Sadece Pacman depolarında ara
+  pacman_items=$(pacman -Ss "$search_term" | grep -E '^[^/]+/([^ ]+)\s' | sed 's|^[^/]\+/||' | awk '{print $1}')
+
+  for item in $pacman_items; do
+    options+=("$item" "[CORE/EXTRA]" off)
   done
 
-  local sel
-  sel=$(dialog --backtitle "$apptitle" --title "$title" --cancel-button "Back" --checklist "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
-
-  if [[ "$?" -ne 0 ]]; then
+  # Arama sonucu yoksa veya kullanıcı iptal ederse
+  if [[ ${#options[@]} -eq 0 ]]; then
+    clear
+    message "Pacman depolarında hiçbir paket bulunamadı: $search_term" "Arama Sonucu"
+    pressanykey
     return 1
   fi
 
-  local pkg=""
-  for itm in $sel; do
-    pkg="$pkg $(echo "$itm" | sed 's/"//g')"
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "Paket Seçimi: $title (Sadece Depolar)" --cancel-button "Geri" --checklist "Kurulacak paketleri seçin:" 20 80 15 "${options[@]}" 3>&1 1>&2 2>&3)
+  local dialog_exit_code="$?"
+
+  if [[ "$dialog_exit_code" -ne 0 ]]; then
+    return 1
+  fi
+
+  # Seçilen Pacman paketlerini işle
+  for item in $sel; do
+    selected_pacman_pkgs="$selected_pacman_pkgs $(echo "$item" | sed 's/"//g')"
   done
 
-  instpkg "$pkg" "$aurpkg"
+  # instpkg fonksiyonuna sadece Pacman paketlerini gönder
+  instpkg "${selected_pacman_pkgs}" ""
+
   return 0
+}
+
+# Sadece AUR'da arama yapar ve seçimi döndürür.
+chooseaurpkg() {
+  local search_term="$1"
+  local title="${2:-$search_term}"
+  local options=()
+  local aur_items=""
+  local selected_aur_pkgs=""
+
+  # -----------------------------------------------
+  # AUR Yardımcısı Kontrolü (Global değişkeni kullan)
+  # -----------------------------------------------
+  if [[ -z "$AUR_YARDIMCISI" ]]; then
+    clear
+    message "AUR paketlerini aramak için bir yardımcı (paru/yay) belirlenmelidir." "AUR Hatası"
+    pressanykey
+    return 1
+  fi
+
+  local aur_helper="$AUR_YARDIMCISI"
+
+  clear
+  echo -e "\033[1;33m>> '$search_term' için AUR'da ($aur_helper) aranıyor...\033[0m"
+
+  # Sadece AUR'da ara (Global helper kullanılır)
+  aur_items=$("$aur_helper" -Ssq "$search_term")
+
+  # Seçenekleri Oluşturma
+  for item in $aur_items; do
+    options+=("$item" "[AUR]" off)
+  done
+
+  if [[ ${#options[@]} -eq 0 ]]; then
+    clear
+    message "AUR'da hiçbir paket bulunamadı: $search_term" "Arama Sonucu"
+    pressanykey
+    return 1
+  fi
+
+  # -----------------------------------------------
+  # İnteraktif Seçim
+  # -----------------------------------------------
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "Paket Seçimi: $title (Sadece AUR)" --cancel-button "Geri" --checklist "Kurulacak AUR paketlerini seçin:" 20 80 15 "${options[@]}" 3>&1 1>&2 2>&3)
+  local dialog_exit_code="$?"
+
+  if [[ "$dialog_exit_code" -ne 0 ]]; then
+    return 1
+  fi
+
+  # Seçilen AUR paketlerini işle
+  echo -e "\033[1;33m>> Seçilen AUR paketleri yüklenmeye hazırlanıyor...\033[0m"
+
+  for item in $sel; do
+    selected_aur_pkgs="$selected_aur_pkgs $(echo "$item" | sed 's/"//g')"
+  done
+
+  # instpkg fonksiyonuna sadece AUR paketlerini gönder
+  instpkg "" "${selected_aur_pkgs}"
+
+  return 0
+}
+
+# Seçimi yapar ve seçilen helper'ı stdout'a yazar.
+# Argüman olarak "interaktif" veya "otomatik" alır.
+aur_helper_check() {
+  local mod="$1" # "interaktif" veya "otomatik"
+  local paru_exists
+  local yay_exists
+
+  command -v paru &>/dev/null && paru_exists=true || paru_exists=false
+  command -v yay &>/dev/null && yay_exists=true || yay_exists=false
+
+  if ! $paru_exists && ! $yay_exists; then
+    return 1 # Hiçbiri kurulu değil
+  fi
+
+  if [[ "$mod" == "interaktif" ]] && $paru_exists && $yay_exists; then
+    # *** İnteraktif Mod: Kullanıcıya sor ***
+    local choice
+    choice=$(dialog --backtitle "$apptitle" --title "AUR Yardımcısı Seçimi" --menu "Sisteminizde hem Paru hem Yay kurulu. Hangisini kullanmak istersiniz?" 0 0 0 \
+      "paru" "Gelişmiş, Rust tabanlı AUR yardımcısı" \
+      "yay" "Popüler, Go tabanlı AUR yardımcısı" \
+      3>&1 1>&2 2>&3)
+
+    if [[ -n "$choice" ]]; then
+      echo "$choice"
+      return 0
+    else
+      return 1 # İptal
+    fi
+
+  elif $paru_exists; then
+    # *** Otomatik/Tercih Modu: Paru'yu otomatik seç ***
+    echo "paru"
+    return 0
+  elif $yay_exists; then
+    # *** Otomatik Mod: Yay'ı otomatik seç ***
+    echo "yay"
+    return 0
+  fi
+
+  return 1
 }
 
 # Systemd servisini etkinleştirir
@@ -351,7 +498,7 @@ ddci-setup() {
     fi
     echo "UYARI: $AUR_DRIVER sürücüsü kurulu değil." >&2
 
-    read -r -p "$AUR_DRIVER sürücüsünü yay ile kurmak ister misiniz? (AUR paketi) [e/H] " response
+    read -r -p "$AUR_DRIVER sürücüsünü $AUR_YARDIMCISI ile kurmak ister misiniz? (AUR paketi) [e/H] " response
     response=${response,,}
     if [[ "$response" =~ ^(e|evet)$ ]]; then
       echo "$AUR_DRIVER kuruluyor..."
@@ -1151,6 +1298,7 @@ programming_tools() {
     "python-requests" "" on
     "go" "" on
     "go-tools" "" on
+    "shellcheck" "" on
     "codespell" "" on
     "npm" "" on
     "yarn" "" on
@@ -1384,7 +1532,7 @@ file_browsers() {
     "thunar" "XFCE" off
     "thunar-volman" "XFCE" off
     "thunar-archive-plugin" "XFCE" off
-    "thunar-shares-plugin" "(AUR)" off
+    "thunar-shares-plugin" "" off
     "file-roller" "" off
     "tumbler" "" off
   )
@@ -1397,7 +1545,7 @@ file_browsers() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "thunar-shares-plugin") aurpkg="$aurpkg $item" ;;
+      # aurpkg="$aurpkg $item" ;;
       *) pkg="$pkg $item" ;;
       esac
     done
@@ -1952,7 +2100,6 @@ displaymanager() {
     "gdm" "Gnome Giriş Yöneticisi"
     "sddm" "QT Giriş Yöneticisi"
     "sddm-git" "(AUR)"
-    "regreet" "Ayarları tamamlanmadı"
     "lxdm" "LXDE Giriş Yöneticisi"
     "lightdm-gtk-greeter" "Diğer Giriş Yöneticisi"
   )
@@ -1974,11 +2121,6 @@ displaymanager() {
       instpkg "" "sddm-git"
       serviceenable sddm
       ;;
-    "regreet")
-      instpkg "greetd-regreet" ""
-      regreet_configuration
-      serviceenable greetd
-      ;;
     "lxdm")
       instpkg "lxdm" ""
       serviceenable lxdm
@@ -1989,15 +2131,6 @@ displaymanager() {
       ;;
     esac
   fi
-}
-
-regreet_configuration() {
-  sudo mkdir -p /etc/greetd
-
-  printf "%s\n" "[terminal]" "vt = 1" "" "[default_session]" "command = \"Hyprland --config /home/"$localuser"/.config/regreet/hyprland.conf\"" "user = \"$localuser\"" | sudo tee /etc/greetd/config.toml >/dev/null
-
-  sudo usermod -a -G video "$localuser"
-  sudo chown "$localuser":"$localuser" /etc/greetd
 }
 
 # --------------------------
@@ -2768,9 +2901,9 @@ shutdownmenu() {
 }
 
 # ==========================================================
-# Gerekli Bileşenleri ve Global Kapsamı Yükle
+# Gerekli Bileşenler ve Ön Hazırlık
 # ==========================================================
-genelkapsamiyukle() {
+onhazirlik() {
   # Açık dizi ile packet bağımlılıkları
   local packages=()
   packages=(
@@ -2833,11 +2966,6 @@ genelkapsamiyukle() {
 
   export DIALOGRC="${color_config}" # dialog için renk dosyasını ayarla
   export EDITOR=nvim                # Varsayılan düzenleyiciyi ayarla
-
-  # Global değişkenler
-  declare -g apptitle="Arch Linux DE & Uygulama Kurulumu"
-  declare -g localuser="$(whoami)"
-  declare -g script_dir="$(dirname "$(realpath "$0")")"
 }
 
 # ==========================================================
@@ -2878,6 +3006,9 @@ baslat() {
   #   return 1
   # fi
 
+  # ----------------------------------------------------
+  # FONKSİYON LİSTELEME VE ÇIKIŞ
+  # ----------------------------------------------------
   if [[ "$1" == "fonksiyonlar" ]]; then
     # FONKSİYON LİSTELEME VE SÜTUNLARA AYIRMA
     grep '() {' "$(realpath "$0")" |
@@ -2888,15 +3019,37 @@ baslat() {
     exit 0
   fi
 
+  # ----------------------------------------------------
+  # 1. AUR YARDIMCISINI ERKEN KONTROL ET (Tüm Modlar İçin)
+  # ----------------------------------------------------
+  # Kontrolün hangi modda yapılacağını belirle:
+  local aur_mod="otomatik"
   if [[ -z "$1" ]]; then
+    aur_mod="interaktif" # Argümansız ise interaktif mod (Kullanıcıya sorulur)
+  fi
+
+  if [[ "$AUR_YARDIMCISI_KONTROL_ETTIK" = false ]]; then
+    # AUR Yardımcısını kontrol et ve global değişkeni ata.
+    AUR_YARDIMCISI=$(aur_helper_check "$aur_mod")
+    AUR_YARDIMCISI_KONTROL_ETTIK=true
+  fi
+
+  # ----------------------------------------------------
+  # 2. ANA AKIŞ YÖNETİMİ
+  # ----------------------------------------------------
+
+  # ÖN HAZIRLIĞI HERZAMAN ÇALIŞMALI (Gerekli Bağımlılıklar ve Ortam Ayarları)
+  onhazirlik || return 1
+
+  if [[ -z "$1" ]]; then
+    # *** İnteraktif Mod ***
     echo "Arch Linux Kurulumu başlatılıyor..."
-    genelkapsamiyukle || return 1
     mainmenu
   else
+    # *** Fonksiyon Modu ***
     echo "Arch Linux Kurulumu - Fonksiyon Modu"
-    # Komut satırı argümanı olarak bir fonksiyon adı verilmişse
+
     if declare -f "$1" >/dev/null; then
-      genelkapsamiyukle || return 1
       "$@" # Uygun argüman işleme ile fonksiyonu çalıştır
     else
       echo "Hata: Fonksiyon '$1' bulunamadı" >&2
@@ -2905,6 +3058,7 @@ baslat() {
   fi
 
   kurulum_temizle
+  return 0
 }
 
 baslat "$@"
