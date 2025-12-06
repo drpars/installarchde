@@ -1692,8 +1692,10 @@ install_darkly_deps() {
 # --- Oyun Başlatıcıları Seçimi ---
 game_launchers() {
   local options=(
+    "lutris" "" off
     "steam" "" off
     "heroic-games-launcher-bin" "(AUR)" off
+    "gamescope" "" off
   )
 
   local sel
@@ -1929,6 +1931,7 @@ hyprland() {
     "hyprlock" "" on
     "hyprcursor" "" on
     "hyprpolkitagent" "" on
+    "hyprqt6engine" "(AUR)" on
     "xdg-desktop-portal-hyprland" "" on
     "qt5-wayland" "" on
     "qt6-wayland" "" on
@@ -1957,7 +1960,8 @@ hyprland() {
     "pavucontrol" "" on
     "bluetui" "Bluetooth kontrol uygulaması (TUI)" on
     "impala" "iwd için uygulama (TUI)" on
-    "brightnessctl" "" off
+    "brightnessctl" "" on
+    "ddcci-driver-linux-dkms-git" "(AUR)" on
   )
 
   local sel
@@ -1968,13 +1972,22 @@ hyprland() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "walker" | "elephant" | "elephant-desktopapplications" | "elephant-archlinuxpkgs" | "wleave-git" | "wlogout" | "waybar-updates" | "waypaper")
+      "hyprqt6engine" | "walker" | "elephant" | "elephant-desktopapplications" | "elephant-archlinuxpkgs" | "wleave-git" | "wlogout" | "waybar-updates" | "waypaper")
         aurpkg="$aurpkg $item"
+        ;;
+      "ddcci-driver-linux-dkms-git")
+        aurpkg="$aurpkg $item"
+        ddci_surucu_secildi=1 # <-- DKMS paketi seçildi
         ;;
       *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
+    if [[ "$ddci_surucu_secildi" -eq 1 ]]; then
+      if pacman -Qq ddcci-driver-linux-dkms-git &>/dev/null; then
+        message "\nddcci-driver-linux-dkms-git kurulumunu tamamlamak için,\n sistemi yeniden başlatmalısınız!" "" 6 50
+      fi
+    fi
   fi
 }
 
@@ -2142,14 +2155,14 @@ configmenu() {
   local nextitem="${1:-.}"
   local options=(
     "Dotfile'lar" "Kullanıcı yapılandırma dosyaları"
-    "Takas Dosyası Yapılandırması" "Hazırda bekletme (hibernation) için çekirdek modülü ayarı (systemd-boot)"
+    "Takas Dosyası Yapılandırması" "Hazırda bekletme için çekirdek modülü ayarı (systemd-boot)"
     "Ağ Yapılandırması" "Dosya paylaşımı ve keşif ayarları"
     "TR klavye desteği" "tr, pc105 --> vconsole.conf"
     "DDCCI Sürücü Kurulumu" "DDCCI ayarları"
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Yapılandırma Menüsü" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Yapılandırma Menüsü" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 95 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" = "0" ]]; then
     case ${sel} in
@@ -2243,7 +2256,7 @@ swap_file_config() {
     sudo sed -i '/^HOOKS=(/ s/\<fsck\>/resume &/' "$mkinitfile"
     sudo mkinitcpio -P
   else
-    echo "Resume kancası zaten mkinitcpio.conf'ta mevcut"
+    message "Resume kancası zaten mkinitcpio.conf'ta mevcut"
   fi
 
   # Son doğrulama
@@ -2251,12 +2264,14 @@ swap_file_config() {
     grep -q '^HOOKS=.*\bresume\b' "$mkinitfile"; then
     message "Takas dosyası hazırda bekletme için başarıyla yapılandırıldı!\n\nDeğişikliklerin uygulanması için yeniden başlatmanız gerekiyor."
   else
+    clear
     echo "Hata: Yapılandırma başarısız olmuş olabilir. Lütfen manuel olarak doğrulayın:"
     echo "- /etc/kernel/cmdline içeriği:"
     cat /etc/kernel/cmdline
     echo -e "\n- mkinitcpio kancaları:"
     grep '^HOOKS=' "$mkinitfile"
     return 1
+    pressanykey
   fi
 
   pressanykey
@@ -2355,7 +2370,7 @@ dotfilesmenu() {
   local options=(
     "Dotfile'ları Yönet" "Konfigürasyonları Kopyala/Sembolik Bağla"
     "Neovim" "Neovim dotfile'larını ayarla"
-    "Sddm Tema" "Sugar-Candy veya başka bir SDDM temasını kur"
+    "Sddm Tema" "Sddm temaları"
     "Duvar Kağıtları" "Duvar kağıtlarını kur"
     "KMSCON" "Sanal Konsol yapılandırmasını kur"
     "bat önbelleğini oluştur" "cat muadili"
@@ -2363,7 +2378,7 @@ dotfilesmenu() {
   )
 
   local sel
-  sel=$(dialog --backtitle "$apptitle" --title "Dotfile'lar :" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 60 0 "${options[@]}" 3>&1 1>&2 2>&3)
+  sel=$(dialog --backtitle "$apptitle" --title "Dotfile'lar :" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 77 0 "${options[@]}" 3>&1 1>&2 2>&3)
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
@@ -2376,7 +2391,7 @@ dotfilesmenu() {
       nextitem="Sddm Tema"
       ;;
     "Sddm Tema")
-      install_sddmtheme
+      sddm_thememenu
       nextitem="Duvar Kağıtları"
       ;;
     "Duvar Kağıtları")
@@ -2390,7 +2405,10 @@ dotfilesmenu() {
     "bat önbelleğini oluştur")
       # Bat önbellek oluşturma
       if command -v bat >/dev/null; then
+        clear
+        echo "bat cache --build"
         bat cache --build >/dev/null
+        pressanykey
       fi
       nextitem="Neovim dotfile'larını kaldır"
       ;;
@@ -2732,7 +2750,48 @@ neovim_dot() {
   fi
 }
 
-install_sddmtheme() {
+sddm_thememenu() {
+  local nextitem="${1:-.}"
+  local options=(
+    "Silent sddm" "(AUR)"
+    "Sugar candy" ""
+  )
+
+  local sel
+  sel=$(dialog --backtitle "$apptitle" --title "SDDM Temaları :" --default-item "${nextitem}" --cancel-button "Geri" --menu "" 0 30 0 "${options[@]}" 3>&1 1>&2 2>&3)
+
+  if [[ "$?" -eq 0 ]]; then
+    case ${sel} in
+    "Silent sddm")
+      if confirm "\nSilentSDDM temasını kurmak ister misiniz?" "" 8 60; then
+        instpkg "" "sddm-silent-theme"
+        sddm_silent
+      fi
+      nextitem="Sugar candy"
+      ;;
+    "Sugar candy")
+      sddm_sugarcandy
+      nextitem="Sugar candy"
+      ;;
+    esac
+    sddm_thememenu "${nextitem}"
+  fi
+}
+
+sddm_silent() {
+  # sudo touch /etc/sddm.conf
+  printf "%s\n" \
+    "[General]" \
+    "InputMethod=qtvirtualkeyboard" \
+    "GreeterEnvironment=QML2_IMPORT_PATH=/usr/share/sddm/themes/silent/components/,QT_IM_MODULE=qtvirtualkeyboard" \
+    "Numlock=on" \
+    "" \
+    "[Theme]" \
+    "CursorTheme=Mocu-White-Right" \
+    "Current=silent" | sudo tee /etc/sddm.conf >/dev/null
+}
+
+sddm_sugarcandy() {
   if confirm "\nSugar-Candy temasını kurmak ister misiniz?" "" 8 60; then
 
     isrsync
@@ -3000,6 +3059,9 @@ baslat() {
     echo "Hata: Bu betik root (yönetici) olarak çalıştırılmamalıdır!" >&2
     return 1
   fi
+
+  # Yeni kurulan komutların path'ini tazelemek için
+  hash -r
 
   # if [[ ! -d "$(xdg-user-dir DOWNLOAD)" ]]; then
   #   echo "Hata: XDG kullanıcı dosyaları olmadan bu betik çalışmaz. \nxdg-user-dirs paketini yükleyin. \nxdg-user-dirs-update komutunu çalıştırın! "
