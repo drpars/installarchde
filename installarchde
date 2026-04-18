@@ -239,8 +239,8 @@ aur_helper_check() {
   local paru_exists
   local yay_exists
 
-  command -v paru &>/dev/null && paru_exists=true || paru_exists=false
-  command -v yay &>/dev/null && yay_exists=true || yay_exists=false
+  command -v paru &> /dev/null && paru_exists=true || paru_exists=false
+  command -v yay &> /dev/null && yay_exists=true || yay_exists=false
 
   if ! $paru_exists && ! $yay_exists; then
     return 1 # Hiçbiri kurulu değil
@@ -406,7 +406,7 @@ clone_repo() {
     if git clone --progress --depth 1 "$repo_url" "$target_dir"; then
       echo -e "\n\033[1;32m Başarıyla klonlandı: $target_dir\033[0m"
       echo -e "\033[1;36m Dizin yapısı:\033[0m"
-      command -v tree >/dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
+      command -v tree > /dev/null && tree -L 2 "$target_dir" || ls -la "$target_dir"
       pressanykey
       return 0
     else
@@ -427,7 +427,7 @@ clone_repo() {
 
 # rsync'in kurulu olup olmadığını kontrol eder ve kurar
 isrsync() {
-  if ! command -v rsync &>/dev/null; then
+  if ! command -v rsync &> /dev/null; then
     clear
     echo "rsync kuruluyor ..."
     instpkg "rsync" ""
@@ -456,7 +456,7 @@ ddci-setup() {
 
   # 1. I2C Numarasını bulan fonksiyon
   find_i2c_number() {
-    if ! command -v ddcutil &>/dev/null; then
+    if ! command -v ddcutil &> /dev/null; then
       echo "HATA: 'ddcutil' komutu bulunamadı." >&2
       read -r -p "ddcutil paketini kurmak ister misiniz? (Arch Linux: sudo pacman -S ddcutil) [e/H] " response
       response=${response,,}
@@ -475,7 +475,7 @@ ddci-setup() {
     fi
 
     local I2C_NUMBER
-    I2C_NUMBER=$(ddcutil detect 2>/dev/null |
+    I2C_NUMBER=$(ddcutil detect 2> /dev/null |
       grep -E '^[[:space:]]*I2C bus:' |
       head -n 1 |
       grep -Eo '[0-9]+' |
@@ -492,7 +492,7 @@ ddci-setup() {
 
   # 2. AUR sürücüsünü kontrol eden ve kuran fonksiyon
   install_aur_driver() {
-    if pacman -Qq "$AUR_DRIVER" &>/dev/null; then
+    if pacman -Qq "$AUR_DRIVER" &> /dev/null; then
       echo "BİLGİ: $AUR_DRIVER sürücüsü zaten kurulu."
       return 0
     fi
@@ -520,8 +520,8 @@ ddci-setup() {
     echo "--- Modül Yükleme Kurulumu ---"
     # Modüllerin otomatik yüklenmesi (modülün var olması şarttır)
     echo "BİLGİ: Çekirdek modüllerini kalıcı olarak yüklemek üzere $MODULES_CONF dosyasına ekleniyor."
-    echo "$DDCCI_MODULE" | sudo tee "$MODULES_CONF" >/dev/null
-    echo "$DDCCI_BACKLIGHT_MODULE" | sudo tee -a "$MODULES_CONF" >/dev/null
+    echo "$DDCCI_MODULE" | sudo tee "$MODULES_CONF" > /dev/null
+    echo "$DDCCI_BACKLIGHT_MODULE" | sudo tee -a "$MODULES_CONF" > /dev/null
   }
 
   # 4. Systemd Retry Loader'ı oluşturan ve etkinleştiren fonksiyon
@@ -533,7 +533,7 @@ ddci-setup() {
     # a) Retry Loader Script'i Oluşturuluyor
     echo "BİLGİ: Retry Loader script'i $RETRY_SCRIPT oluşturuluyor."
 
-    cat <<EOF | sudo tee "$RETRY_SCRIPT" >/dev/null
+    cat << EOF | sudo tee "$RETRY_SCRIPT" > /dev/null
 #!/bin/bash
 MAX_ATTEMPTS=7
 I2C_NUM="$I2C_NUM" 
@@ -584,12 +584,12 @@ StandardOutput=journal
 [Install]
 WantedBy=multi-user.target"
 
-    echo "$SERVICE_CONTENT" | sudo tee "$SERVICE_FILE" >/dev/null
+    echo "$SERVICE_CONTENT" | sudo tee "$SERVICE_FILE" > /dev/null
 
     # c) Hizmeti Etkinleştir
     echo "BİLGİ: ddcci-backlight-retry.service etkinleştiriliyor."
     sudo systemctl daemon-reload
-    sudo systemctl enable ddcci-backlight-retry.service >/dev/null 2>&1
+    sudo systemctl enable ddcci-backlight-retry.service > /dev/null 2>&1
 
     echo "BAŞARILI: Systemd Retry Hizmeti kuruldu ve etkinleştirildi."
   }
@@ -625,8 +625,8 @@ WantedBy=multi-user.target"
   # Önceki başarısız denemelerden kalıntıları temizle
   echo "BİLGİ: Önceki systemd servisleri ve modül ayarları temizleniyor..."
   # modprobe.d dosyasını da temizleyelim
-  sudo systemctl disable ddcci-backlight-retry.service 2>/dev/null
-  sudo rm "$SERVICE_FILE" "$RETRY_SCRIPT" /etc/modprobe.d/ddcci.conf 2>/dev/null
+  sudo systemctl disable ddcci-backlight-retry.service 2> /dev/null
+  sudo rm "$SERVICE_FILE" "$RETRY_SCRIPT" /etc/modprobe.d/ddcci.conf 2> /dev/null
   sudo systemctl daemon-reload
 
   # 1. Sürücüyü kontrol et/kur
@@ -670,22 +670,22 @@ mainmenu() {
 
   if [[ "$?" -eq "0" ]]; then
     case ${sel} in
-    "Güncelleme")
-      updatemenu
-      nextitem="Kurulum"
-      ;;
-    "Kurulum")
-      installmenu
-      nextitem="Yapılandırma"
-      ;;
-    "Yapılandırma")
-      configmenu
-      nextitem="Kapatma"
-      ;;
-    "Kapatma")
-      shutdownmenu
-      nextitem="Kapatma"
-      ;;
+      "Güncelleme")
+        updatemenu
+        nextitem="Kurulum"
+        ;;
+      "Kurulum")
+        installmenu
+        nextitem="Yapılandırma"
+        ;;
+      "Yapılandırma")
+        configmenu
+        nextitem="Kapatma"
+        ;;
+      "Kapatma")
+        shutdownmenu
+        nextitem="Kapatma"
+        ;;
     esac
     mainmenu "${nextitem}"
   fi
@@ -719,69 +719,69 @@ updatemenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "yay Kur")
-      if confirm "\nyay kurulsun mu?" "" 8 60; then
+      "yay Kur")
+        if confirm "\nyay kurulsun mu?" "" 8 60; then
+          clear
+          git clone https://aur.archlinux.org/yay-bin.git
+          cd yay-bin || return
+          makepkg -si
+          cd ..
+          rm -rf yay-bin
+          pressanykey
+        fi
+        nextitem="paru Kur"
+        ;;
+      "paru Kur")
+        if confirm "\nparu kurulsun mu?" "" 8 60; then
+          clear
+          git clone https://aur.archlinux.org/paru.git
+          cd paru || return
+          makepkg -si
+          cd ..
+          pressanykey
+        fi
+        nextitem="Sistemi Güncelle"
+        ;;
+      "Sistemi Güncelle")
         clear
-        git clone https://aur.archlinux.org/yay-bin.git
-        cd yay-bin || return
-        makepkg -si
-        cd ..
-        rm -rf yay-bin
-        pressanykey
-      fi
-      nextitem="paru Kur"
-      ;;
-    "paru Kur")
-      if confirm "\nparu kurulsun mu?" "" 8 60; then
+        sudo pacman -Syu
+        nextitem="Gereksiz Bağımlılıkları Temizle"
+        ;;
+      "Gereksiz Bağımlılıkları Temizle")
         clear
-        git clone https://aur.archlinux.org/paru.git
-        cd paru || return
-        makepkg -si
-        cd ..
-        pressanykey
-      fi
-      nextitem="Sistemi Güncelle"
-      ;;
-    "Sistemi Güncelle")
-      clear
-      sudo pacman -Syu
-      nextitem="Gereksiz Bağımlılıkları Temizle"
-      ;;
-    "Gereksiz Bağımlılıkları Temizle")
-      clear
-      sudo pacman -Rns $(pacman -Qqtd)
-      nextitem="Packet Önbelleğini Temizle"
-      ;;
-    "Packet Önbelleğini Temizle")
-      clear
-      sudo pacman -Sc
-      nextitem="Pacman Yapılandırmasını Düzenle"
-      ;;
-    "Pacman Yapılandırmasını Düzenle")
-      clear
-      sudo nvim /etc/pacman.conf
-      nextitem="Mirrorlist Düzenle"
-      ;;
-    "Mirrorlist Düzenle")
-      clear
-      sudo nvim /etc/pacman.d/mirrorlist
-      nextitem="Arch Anahtar Halkasını Güncelle"
-      ;;
-    "Arch Anahtar Halkasını Güncelle")
-      clear
-      sudo pacman -S archlinux-keyring
-      nextitem="Pacman Anahtarlarını Yenile"
-      ;;
-    "Pacman Anahtarlarını Yenile")
-      clear
-      sudo pacman-key --refresh-keys
-      nextitem="Pacman Kilit Dosyasını Kaldır"
-      ;;
-    "Pacman Kilit Dosyasını Kaldır")
-      clear
-      sudo rm /var/lib/pacman/db.lck
-      nextitem="Pacman Kilit Dosyasını Kaldır"
-      ;;
+        sudo pacman -Rns $(pacman -Qqtd)
+        nextitem="Packet Önbelleğini Temizle"
+        ;;
+      "Packet Önbelleğini Temizle")
+        clear
+        sudo pacman -Sc
+        nextitem="Pacman Yapılandırmasını Düzenle"
+        ;;
+      "Pacman Yapılandırmasını Düzenle")
+        clear
+        sudo nvim /etc/pacman.conf
+        nextitem="Mirrorlist Düzenle"
+        ;;
+      "Mirrorlist Düzenle")
+        clear
+        sudo nvim /etc/pacman.d/mirrorlist
+        nextitem="Arch Anahtar Halkasını Güncelle"
+        ;;
+      "Arch Anahtar Halkasını Güncelle")
+        clear
+        sudo pacman -S archlinux-keyring
+        nextitem="Pacman Anahtarlarını Yenile"
+        ;;
+      "Pacman Anahtarlarını Yenile")
+        clear
+        sudo pacman-key --refresh-keys
+        nextitem="Pacman Kilit Dosyasını Kaldır"
+        ;;
+      "Pacman Kilit Dosyasını Kaldır")
+        clear
+        sudo rm /var/lib/pacman/db.lck
+        nextitem="Pacman Kilit Dosyasını Kaldır"
+        ;;
     esac
 
     updatemenu "${nextitem}"
@@ -804,30 +804,30 @@ installmenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Sürücüler")
-      driversmenu
-      nextitem="Uygulamalar"
-      ;;
-    "Uygulamalar")
-      menu_main_applications
-      nextitem="Yazı Tipleri"
-      ;;
-    "Yazı Tipleri")
-      fonts
-      nextitem="Temalar"
-      ;;
-    "Temalar")
-      themes
-      nextitem="Masaüstü Ortamları"
-      ;;
-    "Masaüstü Ortamları")
-      demenu
-      nextitem="Görüntü Yöneticileri"
-      ;;
-    "Görüntü Yöneticileri")
-      displaymanager
-      nextitem="Görüntü Yöneticileri"
-      ;;
+      "Sürücüler")
+        driversmenu
+        nextitem="Uygulamalar"
+        ;;
+      "Uygulamalar")
+        menu_main_applications
+        nextitem="Yazı Tipleri"
+        ;;
+      "Yazı Tipleri")
+        fonts
+        nextitem="Temalar"
+        ;;
+      "Temalar")
+        themes
+        nextitem="Masaüstü Ortamları"
+        ;;
+      "Masaüstü Ortamları")
+        demenu
+        nextitem="Görüntü Yöneticileri"
+        ;;
+      "Görüntü Yöneticileri")
+        displaymanager
+        nextitem="Görüntü Yöneticileri"
+        ;;
     esac
     installmenu "${nextitem}"
   fi
@@ -853,34 +853,34 @@ driversmenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "AMD")
-      amddriver
-      nextitem="NVIDIA"
-      ;;
-    "NVIDIA")
-      nvidiadriver
-      nextitem="NVIDIA VA-API"
-      ;;
-    "NVIDIA VA-API")
-      nvidia_vaapi
-      nextitem="ASUS"
-      ;;
-    "ASUS")
-      asusdriver
-      nextitem="Ses Sistemi"
-      ;;
-    "Ses Sistemi")
-      sounddriver
-      nextitem="mkinitcpio Firmware"
-      ;;
-    "mkinitcpio Firmware")
-      if confirm "\nFirmware kurulsun mu?" "" 8 60; then
-        clear
-        instpkg "" mkinitcpio-firmware
-        pressanykey
-      fi
-      nextitem="mkinitcpio Firmware"
-      ;;
+      "AMD")
+        amddriver
+        nextitem="NVIDIA"
+        ;;
+      "NVIDIA")
+        nvidiadriver
+        nextitem="NVIDIA VA-API"
+        ;;
+      "NVIDIA VA-API")
+        nvidia_vaapi
+        nextitem="ASUS"
+        ;;
+      "ASUS")
+        asusdriver
+        nextitem="Ses Sistemi"
+        ;;
+      "Ses Sistemi")
+        sounddriver
+        nextitem="mkinitcpio Firmware"
+        ;;
+      "mkinitcpio Firmware")
+        if confirm "\nFirmware kurulsun mu?" "" 8 60; then
+          clear
+          instpkg "" mkinitcpio-firmware
+          pressanykey
+        fi
+        nextitem="mkinitcpio Firmware"
+        ;;
     esac
     driversmenu "${nextitem}"
   fi
@@ -912,7 +912,7 @@ amddriver() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qq mesa &>/dev/null; then
+    if pacman -Qq mesa &> /dev/null; then
       if confirm "\nGerekli çekirdek modülleri uygulansın mı?" "" 8 60; then
         clear
         configure_amd_modules
@@ -968,7 +968,7 @@ nvidiadriver() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qs nvidia &>/dev/null; then
+    if pacman -Qs nvidia &> /dev/null; then
       if confirm "\nGerekli çekirdek modülleri uygulansın mı?" "" 8 60; then
         clear
         configure_nvidia_modules
@@ -998,19 +998,19 @@ configure_nvidia_modules() {
   sudo mkinitcpio -P
 
   if [[ ! -f /etc/modprobe.d/nvidia.conf ]]; then
-    echo "options nvidia_drm modeset=1 fbdev=1" | sudo tee /etc/modprobe.d/nvidia.conf >/dev/null
+    echo "options nvidia_drm modeset=1 fbdev=1" | sudo tee /etc/modprobe.d/nvidia.conf > /dev/null
     sudo mkinitcpio -P
     pressanykey
   fi
 
   if [[ -f /etc/kernel/cmdline ]]; then
     local presentkernelcmdline
-    presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
+    presentkernelcmdline=$(cat /etc/kernel/cmdline 2> /dev/null)
 
     if [[ -n "$presentkernelcmdline" ]]; then
       if ! echo "$presentkernelcmdline" | grep -q "$gpukernel"; then
         local newkernelcmdline="${presentkernelcmdline} ${gpukernel}"
-        echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
+        echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline > /dev/null
         sudo mkinitcpio -P
       else
         echo "$gpukernel - İlgili modüller zaten mevcut..."
@@ -1039,7 +1039,7 @@ nvidia_vaapi() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qq ffnvcodec-headers &>/dev/null; then
+    if pacman -Qq ffnvcodec-headers &> /dev/null; then
       clear
       git clone https://github.com/elFarto/nvidia-vaapi-driver.git
       cd nvidia-vaapi-driver || return
@@ -1056,7 +1056,7 @@ nvidia_vaapi() {
 asusdriver() {
   # Check if the [g14] repository is enabled in pacman.conf
   local isg14repo
-  isg14repo=$(grep -i "^\[g14\]" /etc/pacman.conf >/dev/null && echo true || echo false)
+  isg14repo=$(grep -i "^\[g14\]" /etc/pacman.conf > /dev/null && echo true || echo false)
 
   # Define package options based on the repository status
   local options
@@ -1094,12 +1094,12 @@ asusdriver() {
         pkg="$pkg $item"
       else
         case $item in
-        "asusctl" | "supergfxctl" | "rog-control-center")
-          aurpkg="$aurpkg $item"
-          ;;
-        *)
-          pkg="$pkg $item"
-          ;;
+          "asusctl" | "supergfxctl" | "rog-control-center")
+            aurpkg="$aurpkg $item"
+            ;;
+          *)
+            pkg="$pkg $item"
+            ;;
         esac
       fi
     done
@@ -1134,8 +1134,8 @@ sounddriver() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "jamesdsp-pipewire-bin") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
+        "jamesdsp-pipewire-bin") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1170,54 +1170,54 @@ menu_main_applications() {
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Konsol")
-      console_apps
-      nextitem="Sıkıştırma araçları"
-      ;;
-    "Sıkıştırma araçları")
-      compression_tools
-      nextitem="Programlama"
-      ;;
-    "Programlama")
-      programming_tools
-      nextitem="Dosya sistemleri"
-      ;;
-    "Dosya sistemleri")
-      filesystem_tools
-      nextitem="Sistem"
-      ;;
-    "Sistem")
-      system_apps
-      nextitem="İnternet"
-      ;;
-    "İnternet")
-      internet_apps
-      nextitem="Ortak uygulamalar"
-      ;;
-    "Ortak uygulamalar")
-      common_apps
-      nextitem="Dosya gezginleri"
-      ;;
-    "Dosya gezginleri")
-      file_browsers
-      nextitem="Multimedya"
-      ;;
-    "Multimedya")
-      multimedia_apps
-      nextitem="Tema Motoru"
-      ;;
-    "Tema Motoru")
-      theme_engines
-      nextitem="Oyunlar"
-      ;;
-    "Oyunlar")
-      game_launchers
-      nextitem="Diğer"
-      ;;
-    "Diğer")
-      other_apps
-      nextitem="Diğer"
-      ;;
+      "Konsol")
+        console_apps
+        nextitem="Sıkıştırma araçları"
+        ;;
+      "Sıkıştırma araçları")
+        compression_tools
+        nextitem="Programlama"
+        ;;
+      "Programlama")
+        programming_tools
+        nextitem="Dosya sistemleri"
+        ;;
+      "Dosya sistemleri")
+        filesystem_tools
+        nextitem="Sistem"
+        ;;
+      "Sistem")
+        system_apps
+        nextitem="İnternet"
+        ;;
+      "İnternet")
+        internet_apps
+        nextitem="Ortak uygulamalar"
+        ;;
+      "Ortak uygulamalar")
+        common_apps
+        nextitem="Dosya gezginleri"
+        ;;
+      "Dosya gezginleri")
+        file_browsers
+        nextitem="Multimedya"
+        ;;
+      "Multimedya")
+        multimedia_apps
+        nextitem="Tema Motoru"
+        ;;
+      "Tema Motoru")
+        theme_engines
+        nextitem="Oyunlar"
+        ;;
+      "Oyunlar")
+        game_launchers
+        nextitem="Diğer"
+        ;;
+      "Diğer")
+        other_apps
+        nextitem="Diğer"
+        ;;
     esac
 
     menu_main_applications "${nextitem}"
@@ -1254,8 +1254,8 @@ console_apps() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "cmatrix-neo-git") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
+        "cmatrix-neo-git") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1399,8 +1399,8 @@ internet_apps() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "zen-browser-bin") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
+        "zen-browser-bin") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1411,8 +1411,8 @@ internet_apps() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "firefox") choosepkg "firefox-i18n-" ;;
-      "thunderbird") choosepkg "thunderbird-i18n-" ;;
+        "firefox") choosepkg "firefox-i18n-" ;;
+        "thunderbird") choosepkg "thunderbird-i18n-" ;;
       esac
     done
   fi
@@ -1445,10 +1445,10 @@ common_apps() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "waydroid" | "waydroid-helper" | "webapp-manager" | "stacer-bin")
-        aurpkg="$aurpkg $item"
-        ;;
-      *) pkg="$pkg $item" ;;
+        "waydroid" | "waydroid-helper" | "webapp-manager" | "stacer-bin")
+          aurpkg="$aurpkg $item"
+          ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1459,14 +1459,14 @@ common_apps() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "libreoffice-fresh") choosepkg "libreoffice-fresh-" ;;
-      "libreoffice-still") choosepkg "libreoffice-still-" ;;
+        "libreoffice-fresh") choosepkg "libreoffice-fresh-" ;;
+        "libreoffice-still") choosepkg "libreoffice-still-" ;;
       esac
     done
 
     # Waydroid bağımlılıklarını yönet
     if [[ "${sel}" == *"waydroid"* ]]; then
-      if ! pacman -Qq linux-zen &>/dev/null; then
+      if ! pacman -Qq linux-zen &> /dev/null; then
         if confirm "Waydroid en iyi linux-zen çekirdeği ile çalışır.\nBunun yerine binder_linux-dkms kurulsun mu?" "" 10 60; then
           config_waydroid_dependencies
         fi
@@ -1492,10 +1492,10 @@ config_waydroid_dependencies() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "binder_linux-dkms" | "python-pyclip" | "waydroid-helper")
-        aurpkg="$aurpkg $item"
-        ;;
-      *) pkg="$pkg $item" ;;
+        "binder_linux-dkms" | "python-pyclip" | "waydroid-helper")
+          aurpkg="$aurpkg $item"
+          ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1504,11 +1504,11 @@ config_waydroid_dependencies() {
 
     # Çekirdek komut satırını güncelle
     local presentkernelcmdline
-    presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
+    presentkernelcmdline=$(cat /etc/kernel/cmdline 2> /dev/null)
 
-    if ! grep -q "binder" <<<"$presentkernelcmdline"; then
+    if ! grep -q "binder" <<< "$presentkernelcmdline"; then
       local newkernelcmdline="${presentkernelcmdline} device=binder,hwbinder,vndbinder"
-      echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
+      echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline > /dev/null
       sudo mkinitcpio -P
       serviceenable waydroid-container
       message "Waydroid başarıyla kuruldu.\nÇalıştırmadan önce yeniden başlatın!" "" 8 60
@@ -1545,8 +1545,8 @@ file_browsers() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      # aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
+        # aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1635,10 +1635,10 @@ theme_engines() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "qt6ct-kde" | "darkly-bin" | "darkly-qt5-git" | "darkly-qt6-git")
-        aurpkg="$aurpkg $item"
-        ;;
-      *) pkg="$pkg $item" ;;
+        "qt6ct-kde" | "darkly-bin" | "darkly-qt5-git" | "darkly-qt6-git")
+          aurpkg="$aurpkg $item"
+          ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1706,10 +1706,10 @@ game_launchers() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "heroic-games-launcher-bin")
-        aurpkg="$aurpkg $item"
-        ;;
-      *) pkg="$pkg $item" ;;
+        "heroic-games-launcher-bin")
+          aurpkg="$aurpkg $item"
+          ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -1726,9 +1726,9 @@ other_apps() {
   local sel
   sel=$(dialog --backtitle "$apptitle" --title "Diğer uygulamalar :" --cancel-button "Geri" --menu "" 0 0 0 "${options[@]}" 3>&1 1>&2 2>&3)
   case $sel in
-  "Virt Manager")
-    virt_manager_packages
-    ;;
+    "Virt Manager")
+      virt_manager_packages
+      ;;
   esac
 }
 
@@ -1759,7 +1759,7 @@ virt_manager_packages() {
 
     instpkg "$pkg" "$aurpkg"
 
-    if (pacman -Qq libvirt >/dev/null); then
+    if (pacman -Qq libvirt > /dev/null); then
       config_virt_manager
     fi
   fi
@@ -1776,7 +1776,7 @@ config_virt_manager() {
   # libvirtd.conf yapılandır
   if ! grep -q "unix_sock_group = 'libvirt'" /etc/libvirt/libvirtd.conf; then
     printf "\nunix_sock_group = 'libvirt'\nunix_sock_rw_perms = '0770'\n" |
-      sudo tee -a /etc/libvirt/libvirtd.conf >/dev/null
+      sudo tee -a /etc/libvirt/libvirtd.conf > /dev/null
   else
     echo "/etc/libvirt/libvirtd.conf zaten değiştirilmiş..."
   fi
@@ -1784,7 +1784,7 @@ config_virt_manager() {
   # qemu.conf yapılandır
   if ! grep -q "user = \"$localuser\"" /etc/libvirt/qemu.conf; then
     printf "\n# Kullanıcı Ayarları\nuser = \"%s\"\ngroup = \"%s\"\n" "$localuser" "$localuser" |
-      sudo tee -a /etc/libvirt/qemu.conf >/dev/null
+      sudo tee -a /etc/libvirt/qemu.conf > /dev/null
   else
     echo "/etc/libvirt/qemu.conf zaten değiştirilmiş..."
   fi
@@ -1792,7 +1792,7 @@ config_virt_manager() {
   # network.conf yapılandır
   if ! grep -q "firewall_backend=\"iptables\"" /etc/libvirt/network.conf; then
     printf "\nfirewall_backend=\"iptables\"\n" |
-      sudo tee -a /etc/libvirt/network.conf >/dev/null
+      sudo tee -a /etc/libvirt/network.conf > /dev/null
   else
     echo "/etc/libvirt/network.conf zaten yapılandırılmış..."
   fi
@@ -1813,8 +1813,8 @@ config_virt_manager() {
 
   # Grupları mevcut değilse oluştur
   for group in libvirt kvm; do
-    if ! getent group "$group" >/dev/null; then
-      sudo groupadd -f "$group" 2>/dev/null
+    if ! getent group "$group" > /dev/null; then
+      sudo groupadd -f "$group" 2> /dev/null
     fi
   done
 
@@ -1853,8 +1853,8 @@ fonts() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
+        # "") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
@@ -1874,18 +1874,18 @@ themes() {
 
   if [[ "$?" -eq 0 ]]; then
     case $sel in
-    "Qogir icon theme")
-      instpkg "" "qogir-icon-theme"
-      nextitem="Tokyonight GTK theme"
-      ;;
-    "Tokyonight GTK theme")
-      instpkg "" "tokyonight-gtk-theme-git"
-      nextitem="Mocu xcursor"
-      ;;
-    "Mocu xcursor")
-      instpkg "" "mocu-xcursor"
-      nextitem="Mocu xcursor"
-      ;;
+      "Qogir icon theme")
+        instpkg "" "qogir-icon-theme"
+        nextitem="Tokyonight GTK theme"
+        ;;
+      "Tokyonight GTK theme")
+        instpkg "" "tokyonight-gtk-theme-git"
+        nextitem="Mocu xcursor"
+        ;;
+      "Mocu xcursor")
+        instpkg "" "mocu-xcursor"
+        nextitem="Mocu xcursor"
+        ;;
     esac
     themes "${nextitem}"
   fi
@@ -1905,18 +1905,18 @@ demenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case $sel in
-    "Hyprland")
-      hyprland
-      nextitem="Plasma"
-      ;;
-    "Plasma")
-      plasma
-      nextitem="Gnome"
-      ;;
-    "Gnome")
-      gnome
-      nextitem="Gnome"
-      ;;
+      "Hyprland")
+        hyprland
+        nextitem="Plasma"
+        ;;
+      "Plasma")
+        plasma
+        nextitem="Gnome"
+        ;;
+      "Gnome")
+        gnome
+        nextitem="Gnome"
+        ;;
     esac
     demenu "${nextitem}"
   fi
@@ -1972,19 +1972,19 @@ hyprland() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "hyprqt6engine" | "walker" | "elephant" | "elephant-desktopapplications" | "elephant-archlinuxpkgs" | "wleave-git" | "wlogout" | "waybar-updates" | "waypaper")
-        aurpkg="$aurpkg $item"
-        ;;
-      "ddcci-driver-linux-dkms-git")
-        aurpkg="$aurpkg $item"
-        ddci_surucu_secildi=1 # <-- DKMS paketi seçildi
-        ;;
-      *) pkg="$pkg $item" ;;
+        "hyprqt6engine" | "walker" | "elephant" | "elephant-desktopapplications" | "elephant-archlinuxpkgs" | "wleave-git" | "wlogout" | "waybar-updates" | "waypaper")
+          aurpkg="$aurpkg $item"
+          ;;
+        "ddcci-driver-linux-dkms-git")
+          aurpkg="$aurpkg $item"
+          ddci_surucu_secildi=1 # <-- DKMS paketi seçildi
+          ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
     instpkg "$pkg" "$aurpkg"
     if [[ "$ddci_surucu_secildi" -eq 1 ]]; then
-      if pacman -Qq ddcci-driver-linux-dkms-git &>/dev/null; then
+      if pacman -Qq ddcci-driver-linux-dkms-git &> /dev/null; then
         message "\nddcci-driver-linux-dkms-git kurulumunu tamamlamak için,\n sistemi yeniden başlatmalısınız!" "" 6 50
       fi
     fi
@@ -2037,10 +2037,10 @@ plasma() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      "plasma5-applets-virtual-desktop-bar-git" | "plasma5-applets-window-appmenu-git" | "sddm-conf-git")
-        aurpkg="$aurpkg $item"
-        ;;
-      *) pkg="$pkg $item" ;;
+        "plasma5-applets-virtual-desktop-bar-git" | "plasma5-applets-window-appmenu-git" | "sddm-conf-git")
+          aurpkg="$aurpkg $item"
+          ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
@@ -2122,26 +2122,26 @@ displaymanager() {
 
   if [[ "$?" -eq 0 ]]; then
     case $sel in
-    "gdm")
-      instpkg "gdm" ""
-      serviceenable gdm
-      ;;
-    "sddm")
-      instpkg "sddm" ""
-      serviceenable sddm
-      ;;
-    "sddm-git")
-      instpkg "" "sddm-git"
-      serviceenable sddm
-      ;;
-    "lxdm")
-      instpkg "lxdm" ""
-      serviceenable lxdm
-      ;;
-    "lightdm-gtk-greeter")
-      instpkg "lightdm-gtk-greeter" ""
-      serviceenable lightdm
-      ;;
+      "gdm")
+        instpkg "gdm" ""
+        serviceenable gdm
+        ;;
+      "sddm")
+        instpkg "sddm" ""
+        serviceenable sddm
+        ;;
+      "sddm-git")
+        instpkg "" "sddm-git"
+        serviceenable sddm
+        ;;
+      "lxdm")
+        instpkg "lxdm" ""
+        serviceenable lxdm
+        ;;
+      "lightdm-gtk-greeter")
+        instpkg "lightdm-gtk-greeter" ""
+        serviceenable lightdm
+        ;;
     esac
   fi
 }
@@ -2166,35 +2166,35 @@ configmenu() {
 
   if [[ "$?" = "0" ]]; then
     case ${sel} in
-    "Dotfile'lar")
-      dotfilesmenu
-      nextitem="Takas Dosyası Yapılandırması"
-      ;;
-    "Takas Dosyası Yapılandırması")
-      if confirm "\nHazırda bekletme (hibernation) için çekirdek modülünü uygulamak istiyor musunuz? \nSadece systemd-boot önyükleyicisi için geçerlidir!!! \n " "" 10 60; then
-        swap_file_config
-      else
-        message "\nHerhangi bir değişiklik yapılmadı!" "" 6 40
-      fi
-      nextitem="Ağ Yapılandırması"
-      ;;
-    "Ağ Yapılandırması")
-      network_config
-      nextitem="TR klavye desteği"
-      ;;
-    "TR klavye desteği")
-      clear
-      echo "sudo localectl set-x11-keymap tr pc105"
-      sudo localectl set-x11-keymap tr pc105
-      pressanykey
-      nextitem="DDCCI Sürücü Kurulumu"
-      ;;
-    "DDCCI Sürücü Kurulumu")
-      if confirm "\nDDCCI sürücüsü için gerekli ayarları uygulamak istiyor musunuz? \n " "" 10 65; then
+      "Dotfile'lar")
+        dotfilesmenu
+        nextitem="Takas Dosyası Yapılandırması"
+        ;;
+      "Takas Dosyası Yapılandırması")
+        if confirm "\nHazırda bekletme (hibernation) için çekirdek modülünü uygulamak istiyor musunuz? \nSadece systemd-boot önyükleyicisi için geçerlidir!!! \n " "" 10 60; then
+          swap_file_config
+        else
+          message "\nHerhangi bir değişiklik yapılmadı!" "" 6 40
+        fi
+        nextitem="Ağ Yapılandırması"
+        ;;
+      "Ağ Yapılandırması")
+        network_config
+        nextitem="TR klavye desteği"
+        ;;
+      "TR klavye desteği")
         clear
-        ddci-setup
-      fi
-      ;;
+        echo "sudo localectl set-x11-keymap tr pc105"
+        sudo localectl set-x11-keymap tr pc105
+        pressanykey
+        nextitem="DDCCI Sürücü Kurulumu"
+        ;;
+      "DDCCI Sürücü Kurulumu")
+        if confirm "\nDDCCI sürücüsü için gerekli ayarları uygulamak istiyor musunuz? \n " "" 10 65; then
+          clear
+          ddci-setup
+        fi
+        ;;
     esac
 
     configmenu "${nextitem}"
@@ -2212,14 +2212,14 @@ swap_file_config() {
   fi
 
   # Gerekli araçların kurulu olduğunu doğrula
-  if ! command -v filefrag >/dev/null; then
+  if ! command -v filefrag > /dev/null; then
     echo "Gerekli araçlar kuruluyor (e2fsprogs)..."
     sudo pacman -S e2fsprogs --noconfirm || return 1
   fi
 
   # Takas dosyası detaylarını güvenli bir şekilde al
   local swapfileuuid swapfileoffset
-  swapfileuuid=$(findmnt -no UUID -T /swapfile 2>/dev/null) || {
+  swapfileuuid=$(findmnt -no UUID -T /swapfile 2> /dev/null) || {
     echo "Hata: Takas dosyası UUID'si alınamadı"
     return 1
   }
@@ -2236,17 +2236,17 @@ swap_file_config() {
 
   # Çekirdek komut satırı yapılandırması
   local presentkernelcmdline newkernelcmdline
-  presentkernelcmdline=$(cat /etc/kernel/cmdline 2>/dev/null)
+  presentkernelcmdline=$(cat /etc/kernel/cmdline 2> /dev/null)
   local resume_params="resume=UUID=$swapfileuuid resume_offset=$swapfileoffset"
 
-  if ! grep -Pq "resume=UUID=\S+\s+resume_offset=\d+" <<<"$presentkernelcmdline"; then
+  if ! grep -Pq "resume=UUID=\S+\s+resume_offset=\d+" <<< "$presentkernelcmdline"; then
     # Varsa mevcut bekleme parametrelerini temizle
-    newkernelcmdline=$(sed -E 's/\s*resume=[^ ]+//g;s/\s*resume_offset=[^ ]+//g' <<<"$presentkernelcmdline")
+    newkernelcmdline=$(sed -E 's/\s*resume=[^ ]+//g;s/\s*resume_offset=[^ ]+//g' <<< "$presentkernelcmdline")
     newkernelcmdline="$newkernelcmdline $resume_params"
-    echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline >/dev/null
+    echo "$newkernelcmdline" | sudo tee /etc/kernel/cmdline > /dev/null
     sudo mkinitcpio -P
   else
-    message "Hazırda bekletme parametreleri zaten cmdline'da mevcut:\n$(grep -Po 'resume=.*?(\s|$)' <<<"$presentkernelcmdline")"
+    message "Hazırda bekletme parametreleri zaten cmdline'da mevcut:\n$(grep -Po 'resume=.*?(\s|$)' <<< "$presentkernelcmdline")"
   fi
 
   # mkinitcpio kanca (hook) yapılandırması
@@ -2292,14 +2292,14 @@ network_config() {
     for item in $sel; do
       item=$(echo "$item" | tr -d '"')
       case $item in
-      # "") aurpkg="$aurpkg $item" ;;
-      *) pkg="$pkg $item" ;;
+        # "") aurpkg="$aurpkg $item" ;;
+        *) pkg="$pkg $item" ;;
       esac
     done
 
     instpkg "$pkg" "$aurpkg"
 
-    if pacman -Qq samba >/dev/null; then
+    if pacman -Qq samba > /dev/null; then
       clear
 
       # Samba yapılandırmasını yedekle
@@ -2323,7 +2323,7 @@ network_config() {
         "max log size = 1000" \
         "vfs objects = fruit streams_xattr" \
         "fruit:metadata = stream" \
-        "fruit:model = Macintosh" | sudo tee /etc/samba/smb.conf >/dev/null
+        "fruit:model = Macintosh" | sudo tee /etc/samba/smb.conf > /dev/null
 
       # usershare dizini oluştur
       sudo mkdir -p /var/lib/samba/usershares
@@ -2331,7 +2331,7 @@ network_config() {
       sudo chmod 1770 /var/lib/samba/usershares
 
       # sambashare grubunu yapılandır
-      if ! getent group sambashare >/dev/null; then
+      if ! getent group sambashare > /dev/null; then
         sudo groupadd -r sambashare
       fi
       sudo gpasswd -a "$localuser" sambashare
@@ -2349,12 +2349,12 @@ network_config() {
     fi
 
     # Avahi'yi koşullu olarak etkinleştir
-    if [[ "$sel" == *"avahi"* ]] && pacman -Qq avahi >/dev/null; then
+    if [[ "$sel" == *"avahi"* ]] && pacman -Qq avahi > /dev/null; then
       serviceenable avahi-daemon.service
     fi
 
     # firewalld kullanılıyorsa
-    if command -v firewall-cmd >/dev/null; then
+    if command -v firewall-cmd > /dev/null; then
       sudo firewall-cmd --permanent --add-service=samba
       sudo firewall-cmd --reload
     fi
@@ -2382,47 +2382,47 @@ dotfilesmenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Dotfile'ları Yönet")
-      manage_dotfiles
-      nextitem="Neovim"
-      ;;
-    "Neovim")
-      neovim_dot
-      nextitem="Sddm Tema"
-      ;;
-    "Sddm Tema")
-      sddm_thememenu
-      nextitem="Duvar Kağıtları"
-      ;;
-    "Duvar Kağıtları")
-      install_wallpapers
-      nextitem="KMSCON"
-      ;;
-    "KMSCON")
-      install_kmscon
-      nextitem="bat önbelleğini oluştur"
-      ;;
-    "bat önbelleğini oluştur")
-      # Bat önbellek oluşturma
-      if command -v bat >/dev/null; then
-        clear
-        echo "bat cache --build"
-        bat cache --build >/dev/null
-        pressanykey
-      fi
-      nextitem="Neovim dotfile'larını kaldır"
-      ;;
-    "Neovim dotfile'larını kaldır")
-      if confirm "\nnvim dotfile'larını kaldırmak istiyor musunuz?" "" 8 60; then
-        rm -rf /home/$localuser/.config/nvim
-        rm -rf /home/$localuser/.local/share/nvim
-        rm -rf /home/$localuser/.cache/nvim
-        if [[ "$?" -eq 0 ]]; then
-          message "\nNvim dotfile'ları tamamen kaldırıldı." "" 8 60
+      "Dotfile'ları Yönet")
+        manage_dotfiles
+        nextitem="Neovim"
+        ;;
+      "Neovim")
+        neovim_dot
+        nextitem="Sddm Tema"
+        ;;
+      "Sddm Tema")
+        sddm_thememenu
+        nextitem="Duvar Kağıtları"
+        ;;
+      "Duvar Kağıtları")
+        install_wallpapers
+        nextitem="KMSCON"
+        ;;
+      "KMSCON")
+        install_kmscon
+        nextitem="bat önbelleğini oluştur"
+        ;;
+      "bat önbelleğini oluştur")
+        # Bat önbellek oluşturma
+        if command -v bat > /dev/null; then
+          clear
+          echo "bat cache --build"
+          bat cache --build > /dev/null
+          pressanykey
         fi
-      fi
-      nextitem="Neovim dotfile'larını kaldır"
-      ;;
+        nextitem="Neovim dotfile'larını kaldır"
+        ;;
+      "Neovim dotfile'larını kaldır")
+        if confirm "\nnvim dotfile'larını kaldırmak istiyor musunuz?" "" 8 60; then
+          rm -rf /home/$localuser/.config/nvim
+          rm -rf /home/$localuser/.local/share/nvim
+          rm -rf /home/$localuser/.cache/nvim
+          if [[ "$?" -eq 0 ]]; then
+            message "\nNvim dotfile'ları tamamen kaldırıldı." "" 8 60
+          fi
+        fi
+        nextitem="Neovim dotfile'larını kaldır"
+        ;;
     esac
     dotfilesmenu "${nextitem}"
   fi
@@ -2590,121 +2590,121 @@ manage_dotfiles() {
       3>&1 1>&2 2>&3) || return 1
 
     case $response in
-    "Kopyala")
-      clear
-      echo -e "Değişikliklerin önizlemesi:\n"
-
-      # Sağlam seçili öğeler dizisini kullan
-      for item in "${selected_items[@]}"; do
-        local full_source="${script_dir}/dotfiles/${section}/${item}"
-        local target="${target_base}/${item}"
-        local source # rsync kaynak yolu, dosya veya dizine göre ayarlanır
-
-        # KONTROL: Kaynak yolunu rsync için türe göre ayarla (dosya veya dizin)
-        if [[ -d "$full_source" ]]; then
-          # Eğer kaynak bir dizin ise, *içeriği* kopyalamak için '/' ekle
-          source="${full_source}/"
-        else
-          # Eğer kaynak bir dosya ise, yolu olduğu gibi kullan
-          source="$full_source"
-        fi
-
-        echo -e "─── $item ───"
-        # Önizleme için --dry-run
-        rsync -avh --dry-run --backup --backup-dir="$BACKUP_DIR" \
-          "$source" "$target" --delete
-        echo
-      done
-      pressanykey
-
-      if confirm "Değişiklikleri uygula? Yedekleme konumu: $BACKUP_DIR"; then
+      "Kopyala")
         clear
+        echo -e "Değişikliklerin önizlemesi:\n"
+
+        # Sağlam seçili öğeler dizisini kullan
         for item in "${selected_items[@]}"; do
           local full_source="${script_dir}/dotfiles/${section}/${item}"
           local target="${target_base}/${item}"
-          local source
+          local source # rsync kaynak yolu, dosya veya dizine göre ayarlanır
 
-          # KONTROL: Kaynak yolunu rsync için türe göre ayarla
+          # KONTROL: Kaynak yolunu rsync için türe göre ayarla (dosya veya dizin)
           if [[ -d "$full_source" ]]; then
+            # Eğer kaynak bir dizin ise, *içeriği* kopyalamak için '/' ekle
             source="${full_source}/"
           else
+            # Eğer kaynak bir dosya ise, yolu olduğu gibi kullan
             source="$full_source"
           fi
 
-          if [[ -L "$target" ]]; then
-            echo "Mevcut sembolik bağ kaldırılıyor: $target"
-            rm -f "$target"
-          fi
-
-          echo -e "Kuruluyor: $item"
-          # Gerçek rsync çalıştırması
-          rsync -avh --backup --backup-dir="$BACKUP_DIR" \
+          echo -e "─── $item ───"
+          # Önizleme için --dry-run
+          rsync -avh --dry-run --backup --backup-dir="$BACKUP_DIR" \
             "$source" "$target" --delete
+          echo
         done
         pressanykey
-      fi
-      ;;
 
-    "Sembolik Bağla")
-      local dotfiles_root="${HOME}/.dotfiles"
-      local managed_items=()
+        if confirm "Değişiklikleri uygula? Yedekleme konumu: $BACKUP_DIR"; then
+          clear
+          for item in "${selected_items[@]}"; do
+            local full_source="${script_dir}/dotfiles/${section}/${item}"
+            local target="${target_base}/${item}"
+            local source
 
-      # Sembolik bağ oluşturmadan önce dotfiles deposunu yedekleyerek senkronize et
-      if [[ ! -d "${dotfiles_root}" ]]; then
-        echo "Dotfiles deposu başlatılıyor..."
-        # Bölüm dizini içeriklerini dotfiles kök dizinine senkronize et.
-        if ! rsync -a --backup --backup-dir="${BACKUP_DIR}" \
-          "${script_dir}/dotfiles/" "${dotfiles_root}/"; then
-          echo "Hata: Dotfiles deposu başlatılamadı" >&2
-          return 1
+            # KONTROL: Kaynak yolunu rsync için türe göre ayarla
+            if [[ -d "$full_source" ]]; then
+              source="${full_source}/"
+            else
+              source="$full_source"
+            fi
+
+            if [[ -L "$target" ]]; then
+              echo "Mevcut sembolik bağ kaldırılıyor: $target"
+              rm -f "$target"
+            fi
+
+            echo -e "Kuruluyor: $item"
+            # Gerçek rsync çalıştırması
+            rsync -avh --backup --backup-dir="$BACKUP_DIR" \
+              "$source" "$target" --delete
+          done
+          pressanykey
         fi
-      else
-        echo "Mevcut dotfiles deposu kullanılıyor: ${dotfiles_root}"
-      fi
+        ;;
 
-      clear
-      # Sağlam seçili öğeler dizisini kullan
-      for item in "${selected_items[@]}"; do
-        managed_items+=("$item")
-        local source="$dotfiles_root/${section}/${item}"
-        local target="${target_base}/${item}"
+      "Sembolik Bağla")
+        local dotfiles_root="${HOME}/.dotfiles"
+        local managed_items=()
 
-        # Mevcut hedefi varsa yedekle
-        if [[ -e "$target" ]]; then
-          echo "Yedekleniyor: $target"
-          mv -f "$target" "$BACKUP_DIR"
+        # Sembolik bağ oluşturmadan önce dotfiles deposunu yedekleyerek senkronize et
+        if [[ ! -d "${dotfiles_root}" ]]; then
+          echo "Dotfiles deposu başlatılıyor..."
+          # Bölüm dizini içeriklerini dotfiles kök dizinine senkronize et.
+          if ! rsync -a --backup --backup-dir="${BACKUP_DIR}" \
+            "${script_dir}/dotfiles/" "${dotfiles_root}/"; then
+            echo "Hata: Dotfiles deposu başlatılamadı" >&2
+            return 1
+          fi
+        else
+          echo "Mevcut dotfiles deposu kullanılıyor: ${dotfiles_root}"
         fi
 
-        mkdir -p "$(dirname "$target")"
-        atomic_symlink "$source" "$target"
-      done
+        clear
+        # Sağlam seçili öğeler dizisini kullan
+        for item in "${selected_items[@]}"; do
+          managed_items+=("$item")
+          local source="$dotfiles_root/${section}/${item}"
+          local target="${target_base}/${item}"
 
-      # Yalnızca yönetilen öğeleri doğrula
-      if validate_symlinks "$target_base" "${managed_items[@]}"; then
-        echo "Başarılı - tüm yönetilen bağlantılar geçerli"
-      else
-        read -p "Sorunlar bulundu. Yine de devam edilsin mi? [e/H] " -n 1
-        [[ $REPLY =~ ^[Ee]$ ]] || return 1
-      fi
-      pressanykey
-      ;;
+          # Mevcut hedefi varsa yedekle
+          if [[ -e "$target" ]]; then
+            echo "Yedekleniyor: $target"
+            mv -f "$target" "$BACKUP_DIR"
+          fi
 
-    "Doğrula")
-      local managed_items=()
-      # Sağlam seçili öğeler dizisini kullan
-      for item in "${selected_items[@]}"; do
-        managed_items+=("$item")
-      done
+          mkdir -p "$(dirname "$target")"
+          atomic_symlink "$source" "$target"
+        done
 
-      if validate_symlinks "$target_base" "${managed_items[@]}"; then
-        echo "Başarılı - tüm yönetilen bağlantılar geçerli"
-      else
-        echo "Uyarı: Yönetilen bağlantılarda sorunlar tespit edildi" >&2
-      fi
-      pressanykey
-      ;;
+        # Yalnızca yönetilen öğeleri doğrula
+        if validate_symlinks "$target_base" "${managed_items[@]}"; then
+          echo "Başarılı - tüm yönetilen bağlantılar geçerli"
+        else
+          read -p "Sorunlar bulundu. Yine de devam edilsin mi? [e/H] " -n 1
+          [[ $REPLY =~ ^[Ee]$ ]] || return 1
+        fi
+        pressanykey
+        ;;
 
-    *) return 1 ;;
+      "Doğrula")
+        local managed_items=()
+        # Sağlam seçili öğeler dizisini kullan
+        for item in "${selected_items[@]}"; do
+          managed_items+=("$item")
+        done
+
+        if validate_symlinks "$target_base" "${managed_items[@]}"; then
+          echo "Başarılı - tüm yönetilen bağlantılar geçerli"
+        else
+          echo "Uyarı: Yönetilen bağlantılarda sorunlar tespit edildi" >&2
+        fi
+        pressanykey
+        ;;
+
+      *) return 1 ;;
     esac
   }
 
@@ -2722,15 +2722,15 @@ manage_dotfiles() {
       3>&1 1>&2 2>&3) || return 1
 
     case $choice in
-    "Config")
-      process_installation "config" "$HOME/.config"
-      ;;
-    "Home")
-      process_installation "home" "$HOME"
-      ;;
-    "Çıkış")
-      return 0
-      ;;
+      "Config")
+        process_installation "config" "$HOME/.config"
+        ;;
+      "Home")
+        process_installation "home" "$HOME"
+        ;;
+      "Çıkış")
+        return 0
+        ;;
     esac
   done
 }
@@ -2762,17 +2762,17 @@ sddm_thememenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case ${sel} in
-    "Silent sddm")
-      if confirm "\nSilentSDDM temasını kurmak ister misiniz?" "" 8 60; then
-        instpkg "" "sddm-silent-theme"
-        sddm_silent
-      fi
-      nextitem="Sugar candy"
-      ;;
-    "Sugar candy")
-      sddm_sugarcandy
-      nextitem="Sugar candy"
-      ;;
+      "Silent sddm")
+        if confirm "\nSilentSDDM temasını kurmak ister misiniz?" "" 8 60; then
+          instpkg "" "sddm-silent-theme"
+          sddm_silent
+        fi
+        nextitem="Sugar candy"
+        ;;
+      "Sugar candy")
+        sddm_sugarcandy
+        nextitem="Sugar candy"
+        ;;
     esac
     sddm_thememenu "${nextitem}"
   fi
@@ -2788,7 +2788,7 @@ sddm_silent() {
     "" \
     "[Theme]" \
     "CursorTheme=Mocu-White-Right" \
-    "Current=silent" | sudo tee /etc/sddm.conf >/dev/null
+    "Current=silent" | sudo tee /etc/sddm.conf > /dev/null
 }
 
 sddm_sugarcandy() {
@@ -2801,11 +2801,11 @@ sddm_sugarcandy() {
     local sugarcandy_dir="/usr/share/sddm/themes/sugar-candy"
     local cloned_dotfiles_dir="$script_dir/dotfiles"
 
-    if command -v sddm &>/dev/null; then
+    if command -v sddm &> /dev/null; then
       sudo mkdir -p "$sddmconf_dir"
       sudo mkdir -p "$sugarcandy_dir"
 
-      printf "%s\n" "[Theme]" "Current=sugar-candy" | sudo tee "$sddmconf_dir/10-theme.conf" >/dev/null
+      printf "%s\n" "[Theme]" "Current=sugar-candy" | sudo tee "$sddmconf_dir/10-theme.conf" > /dev/null
 
       if [[ -f "$cloned_dotfiles_dir/sddm/sddm.conf" ]]; then
         sudo rsync -avh "$cloned_dotfiles_dir/sddm/sddm.conf" "$sddmconf_dir/sddm.conf" --delete
@@ -2898,7 +2898,7 @@ install_kmscon() {
     printf "%s\n" \
       "font-name=$font_setting" \
       "font-size=14" \
-      "font-dpi=96" | sudo tee "$config_file" >/dev/null
+      "font-dpi=96" | sudo tee "$config_file" > /dev/null
 
     # tee komutunun başarı kontrolü
     if [ "$?" -ne 0 ]; then
@@ -2945,16 +2945,16 @@ shutdownmenu() {
 
   if [[ "$?" -eq 0 ]]; then
     case $sel in
-    "Yeniden başlat")
-      if confirm "Sistemi şimdi yeniden başlatmak istediğinizden emin misiniz?" "" 6 30; then
-        reboot
-      fi
-      ;;
-    "Kapat")
-      if confirm "Sistemi şimdi kapatmak istediğinizden emin misiniz?" "" 6 30; then
-        poweroff
-      fi
-      ;;
+      "Yeniden başlat")
+        if confirm "Sistemi şimdi yeniden başlatmak istediğinizden emin misiniz?" "" 6 30; then
+          reboot
+        fi
+        ;;
+      "Kapat")
+        if confirm "Sistemi şimdi kapatmak istediğinizden emin misiniz?" "" 6 30; then
+          poweroff
+        fi
+        ;;
     esac
   fi
 }
@@ -2976,7 +2976,7 @@ onhazirlik() {
   local missing_pkgs=()
   for pkg in "${packages[@]}"; do
     # -Qe: Sadece kurulu olanları ve açıkça istenenleri listele
-    if ! pacman -Qe "${pkg}" &>/dev/null; then
+    if ! pacman -Qe "${pkg}" &> /dev/null; then
       missing_pkgs+=("$pkg")
     fi
   done
@@ -2993,7 +2993,7 @@ onhazirlik() {
   # --------------------------
   # XDG Kullanıcı Dizinleri Yapılandırması (Öneri ile Güncellenmiştir)
   # --------------------------
-  if pacman -Qq xdg-user-dirs >/dev/null; then
+  if pacman -Qq xdg-user-dirs > /dev/null; then
     # Doğrulama: İNDİRİLENLER dizininin varlığını kontrol et
     if [[ -d "$(xdg-user-dir DOWNLOAD)" ]]; then
       echo "XDG Dizinleri başarıyla oluşturuldu/güncellendi."
@@ -3021,7 +3021,7 @@ onhazirlik() {
     "tag_key_color = (BLACK,WHITE,OFF)" \
     "tag_key_selected_color = (WHITE,BLUE,ON)" \
     "check_color = tag_color" \
-    "check_selected_color = tag_selected_color" >"${color_config}"
+    "check_selected_color = tag_selected_color" > "${color_config}"
 
   export DIALOGRC="${color_config}" # dialog için renk dosyasını ayarla
   export EDITOR=nvim                # Varsayılan düzenleyiciyi ayarla
@@ -3111,7 +3111,7 @@ baslat() {
     # *** Fonksiyon Modu ***
     echo "Arch Linux Kurulumu - Fonksiyon Modu"
 
-    if declare -f "$1" >/dev/null; then
+    if declare -f "$1" > /dev/null; then
       "$@" # Uygun argüman işleme ile fonksiyonu çalıştır
     else
       echo "Hata: Fonksiyon '$1' bulunamadı" >&2
